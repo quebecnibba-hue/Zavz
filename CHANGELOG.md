@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- Read compressed JAR manifests so downloaded FDPClient Inject and Julia builds are recognized.
+- Preserve selected JAR locations when saving, reopening and injecting, without copying to a required folder.
+- Select the project by JAR contents and ignore stale inspection results that could restore Julia.
+- Allow manual path editing and validate the current selection before saving.
+
 ### Added
 - **Current FDPClient Inject startup loading**
   - A separate FDPClient Inject project with a manual JAR picker and an embedded x64 DLL

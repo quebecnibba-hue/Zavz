@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import {
   AlertCircle,
@@ -54,22 +54,15 @@ const STATE_LABELS: Record<PayloadStatus['state'], string> = {
   invalid: 'Wrong file',
 };
 
-function samePath(first: string, second: string): boolean {
-  return first.toLowerCase() === second.toLowerCase();
-}
-
 function describeFile(status: PayloadStatus): string {
   const size = `${(status.sizeBytes / (1024 * 1024)).toFixed(1)} MB`;
-  if (!samePath(status.path, status.installPath)) {
-    return `${size}. Saving copies it to ${status.installPath}`;
-  }
   const date = status.modifiedMs
     ? `, updated ${new Date(status.modifiedMs).toLocaleString('en-GB', {
         dateStyle: 'medium',
         timeStyle: 'short',
       })}`
     : '';
-  return `${status.detected ? 'Found on this PC and installed. ' : ''}${size}${date}`;
+  return `${size}${date}`;
 }
 
 export function VersionModal({
@@ -84,52 +77,67 @@ export function VersionModal({
   const [pickingField, setPickingField] = useState<JarField | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState('');
-  const inspection = useRef(0);
+  const [isChecking, setIsChecking] = useState(true);
+  const wasOpen = useRef(false);
+  const visible = useRef(isOpen);
+  const selectionVersion = useRef(0);
+  visible.current = isOpen;
 
-  const inspect = useCallback(async (current: PayloadConfiguration, detect: boolean) => {
-    if (!isTauriRuntime()) return;
-    const ticket = ++inspection.current;
-    try {
-      const result = await invoke<PayloadStatus[]>('inspect_payloads', {
-        configuration: current,
-        detect,
-      });
-      if (ticket !== inspection.current) return;
-      setStatuses(Object.fromEntries(result.map((status) => [status.id, status])));
-      setDraft((latest) => {
-        const next = { ...latest };
-        for (const status of result) {
-          const project = PROJECTS.find((candidate) => candidate.id === status.id);
-          if (project) next[project.field] = status.path;
-        }
-        return next;
-      });
-    } catch (reason) {
-      if (ticket === inspection.current) setError(String(reason));
+  useEffect(() => {
+    if (isOpen && !wasOpen.current) {
+      setDraft({ ...configuration, selected: [...configuration.selected] });
+      setStatuses({});
+      setPickingField(null);
+      setError('');
     }
-  }, []);
+    if (!isOpen) selectionVersion.current++;
+    wasOpen.current = isOpen;
+  }, [configuration, isOpen]);
 
   useEffect(() => {
     if (!isOpen) return;
-    const opening = { ...configuration, selected: [...configuration.selected] };
-    setDraft(opening);
-    setStatuses({});
-    setError('');
-    void inspect(opening, true);
-  }, [configuration, inspect, isOpen]);
+    let active = true;
+    setIsChecking(true);
+    const timer = window.setTimeout(() => {
+      if (!isTauriRuntime()) {
+        setIsChecking(false);
+        return;
+      }
+      void invoke<PayloadStatus[]>('inspect_payloads', { configuration: draft })
+        .then((result) => {
+          if (active) setStatuses(Object.fromEntries(result.map((status) => [status.id, status])));
+        })
+        .catch((reason: unknown) => {
+          if (active) setError(String(reason));
+        })
+        .finally(() => {
+          if (active) setIsChecking(false);
+        });
+    }, 120);
+    return () => {
+      active = false;
+      window.clearTimeout(timer);
+    };
+  }, [draft, isOpen]);
 
   useEffect(() => {
     if (!isOpen) return;
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onClose();
+      if (event.key === 'Escape' && pickingField === null && !isSaving) onClose();
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, onClose]);
+  }, [isOpen, onClose, pickingField, isSaving]);
 
   if (!isOpen) return null;
 
+  const ensureSelected = (current: PayloadConfiguration, id: PayloadId): PayloadId[] =>
+    current.allowMultiple && id !== 'fdplunar' && !current.selected.includes('fdplunar')
+      ? [...new Set([...current.selected, id])]
+      : [id];
+
   const toggleProject = (id: PayloadId) => {
+    selectionVersion.current++;
     setDraft((current) => ({
       ...current,
       selected:
@@ -143,6 +151,7 @@ export function VersionModal({
   };
 
   const setLoadBoth = (allowMultiple: boolean) => {
+    selectionVersion.current++;
     setDraft((current) => ({
       ...current,
       allowMultiple,
@@ -151,24 +160,61 @@ export function VersionModal({
     setError('');
   };
 
+  const changePath = (field: JarField, path: string) => {
+    selectionVersion.current++;
+    const project = PROJECTS.find((item) => item.field === field);
+    if (!project) return;
+    setStatuses({});
+    setError('');
+    setDraft((current) => ({
+      ...current,
+      [field]: path,
+      selected: ensureSelected(current, project.id),
+    }));
+  };
+
+  const identifyPath = async (field: JarField, path: string, ticket: number) => {
+    if (!path.trim()) return;
+    let project = PROJECTS.find((item) => item.field === field);
+    if (!project) return;
+    let reason = '';
+    try {
+      const id = await invoke<PayloadId>('identify_jar', { path });
+      if (id === 'fdpclient' && profile !== 'Zywl') {
+        throw new Error('This JAR is not supported by the available projects.');
+      }
+      project = PROJECTS.find((item) => item.id === id) ?? project;
+    } catch (error: unknown) {
+      reason = String(error);
+    }
+    if (ticket !== selectionVersion.current || !visible.current) return;
+    const chosen = project;
+    setStatuses({});
+    setError(reason);
+    setDraft((current) => ({
+      ...current,
+      [chosen.field]: path,
+      selected: ensureSelected(current, chosen.id),
+    }));
+  };
+
   const pickJar = async (field: JarField) => {
     if (!isTauriRuntime()) {
       setError('The file picker is available in the desktop application.');
       return;
     }
+    const ticket = ++selectionVersion.current;
     setPickingField(field);
     setError('');
     try {
       const path = await invoke<string | null>('pick_jar_file');
-      if (path) {
-        const next = { ...draft, [field]: path };
-        setDraft(next);
-        await inspect(next, false);
+      if (path && ticket === selectionVersion.current && visible.current) {
+        await identifyPath(field, path, ticket);
       }
     } catch (reason) {
-      setError(String(reason));
+      if (ticket === selectionVersion.current && visible.current) setError(String(reason));
     } finally {
-      setPickingField(null);
+      if (ticket === selectionVersion.current) setPickingField(null);
     }
   };
 
@@ -179,16 +225,11 @@ export function VersionModal({
     );
   };
 
-  const blockedProject = draft.selected.find((id) => {
-    const state = statuses[id]?.state;
-    return state === 'missing' || state === 'invalid';
-  });
+  const blockedProject = draft.selected.find((id) => statuses[id]?.state !== 'ready');
+  const busy = isSaving || pickingField !== null;
 
   const save = async () => {
-    if (!draft.selected.length) {
-      setError('Select a project to load.');
-      return;
-    }
+    if (busy || isChecking || blockedProject || !draft.selected.length) return;
     setIsSaving(true);
     setError('');
     try {
@@ -207,7 +248,7 @@ export function VersionModal({
       className="ds-modal-backdrop"
       role="presentation"
       onMouseDown={(event) => {
-        if (event.target === event.currentTarget && !isSaving) onClose();
+        if (event.target === event.currentTarget && !busy) onClose();
       }}
     >
       <section
@@ -230,7 +271,7 @@ export function VersionModal({
             type="button"
             className="ds-icon-button"
             onClick={onClose}
-            disabled={isSaving}
+            disabled={busy}
             aria-label="Close project selection"
           >
             <X size={16} />
@@ -258,7 +299,7 @@ export function VersionModal({
                     className="ds-project-pick"
                     role={draft.allowMultiple ? 'checkbox' : 'radio'}
                     aria-checked={isSelected}
-                    disabled={isSaving}
+                    disabled={busy}
                     onClick={() => toggleProject(project.id)}
                   >
                     <span className="ds-project-mark">{project.mark}</span>
@@ -292,17 +333,23 @@ export function VersionModal({
                   <div className="ds-project-file">
                     <input
                       value={path}
-                      readOnly
+                      onChange={(event) => changePath(project.field, event.target.value)}
+                      onBlur={(event) => {
+                        if (isTauriRuntime()) {
+                          const ticket = ++selectionVersion.current;
+                          void identifyPath(project.field, event.target.value, ticket);
+                        }
+                      }}
                       spellCheck={false}
-                      disabled={isSaving}
+                      disabled={busy}
                       title={path}
-                      placeholder="Finding the folder on this PC…"
+                      placeholder="Choose a JAR or enter its full path"
                       aria-label={`${label} JAR location`}
                     />
                     <button
                       type="button"
                       onClick={() => reveal(path)}
-                      disabled={isSaving || !path}
+                      disabled={busy || !path}
                       title="Show in folder"
                       aria-label={`Show the ${label} folder`}
                     >
@@ -341,7 +388,7 @@ export function VersionModal({
               aria-checked={draft.allowMultiple}
               aria-label="Load both at once"
               className={`ds-switch ${draft.allowMultiple ? 'active' : ''}`}
-              disabled={isSaving}
+              disabled={busy}
               onClick={() => setLoadBoth(!draft.allowMultiple)}
             >
               <span />
@@ -358,7 +405,7 @@ export function VersionModal({
         <footer className="ds-modal-footer">
           <span className="ds-project-footnote">Restart Minecraft before switching projects.</span>
           <div>
-            <Button variant="secondary" size="md" onClick={onClose} disabled={isSaving}>
+            <Button variant="secondary" size="md" onClick={onClose} disabled={busy}>
               Cancel
             </Button>
             <Button
@@ -366,7 +413,7 @@ export function VersionModal({
               size="md"
               onClick={() => void save()}
               loading={isSaving}
-              disabled={Boolean(blockedProject) || !draft.selected.length}
+              disabled={busy || isChecking || Boolean(blockedProject) || !draft.selected.length}
             >
               Save selection
             </Button>

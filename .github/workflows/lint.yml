@@ -33,6 +33,9 @@ jobs:
       - name: TypeScript type check
         run: yarn type-check
 
+      - name: Test project selection
+        run: yarn test
+
   rust-lint:
     name: Rust Lint (Clippy + Rustfmt)
     runs-on: windows-latest

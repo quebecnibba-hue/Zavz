@@ -79,8 +79,7 @@ impl Default for InjectorSettings {
 impl InjectorSettings {
     fn healed(mut self) -> Self {
         if let Some(legacy) = self.fdp_jar_path.take() {
-            let installed = payloads::jar_path(PayloadId::Fdpclient);
-            if !installed.is_file() && std::path::Path::new(&legacy).is_file() {
+            if self.payloads.fdpclient_jar.trim().is_empty() {
                 self.payloads.fdpclient_jar = legacy;
             }
         }
@@ -159,38 +158,6 @@ fn materialize_dll(name: &str, bytes: &[u8]) -> Result<PathBuf, String> {
             .map_err(|e| format!("Could not install updated ZAVZ loader DLL: {e}"))?;
     }
     dll.canonicalize().map_err(|e| e.to_string())
-}
-
-fn bundled_jar_name(id: PayloadId) -> &'static str {
-    match id {
-        PayloadId::Visuals => "visuals.jar",
-        PayloadId::Fdpclient => "release.jar",
-        PayloadId::Fdplunar => "fdpclient-inject.jar",
-    }
-}
-
-fn find_bundled_jar(app: &AppHandle, id: PayloadId) -> Option<PathBuf> {
-    let name = bundled_jar_name(id);
-    let mut folders: Vec<PathBuf> = Vec::new();
-    if let Ok(resources) = app.path().resource_dir() {
-        folders.push(resources.join("_up_").join("src").join("load"));
-        folders.push(resources.join("src").join("load"));
-        folders.push(resources.join("load"));
-    }
-    if let Some(folder) = std::env::current_exe()
-        .ok()
-        .and_then(|exe| exe.parent().map(PathBuf::from))
-    {
-        folders.push(folder.join("_up_").join("src").join("load"));
-        folders.push(folder.join("resources").join("src").join("load"));
-    }
-    if let Ok(cwd) = std::env::current_dir() {
-        folders.push(cwd.join("src").join("load"));
-    }
-    folders
-        .into_iter()
-        .map(|folder| folder.join(name))
-        .find(|path| payloads::validate_jar(path, id).is_ok())
 }
 
 fn decode_settings_text(bytes: &[u8]) -> String {
@@ -742,17 +709,10 @@ fn resolve_loader_dll(
 }
 
 fn prepare_selected_payloads(
-    app: &AppHandle,
+    _app: &AppHandle,
     configuration: &PayloadConfiguration,
 ) -> Result<Vec<(PayloadId, PathBuf)>, String> {
-    let configuration = configuration.clone().with_resolved_paths();
-    configuration.validate()?;
-    payloads::ensure_layout()?;
-    let bundled = |id| find_bundled_jar(app, id);
-    for &id in &configuration.selected {
-        payloads::adopt_missing(id, &bundled);
-    }
-    payloads::install(&configuration)
+    payloads::resolve_selected(&configuration.clone().with_resolved_paths())
 }
 
 #[tauri::command]
@@ -789,14 +749,17 @@ fn ensure_payload_assets(
 
 #[tauri::command]
 async fn inspect_payloads(
-    app: AppHandle,
     configuration: PayloadConfiguration,
-    detect: bool,
 ) -> Result<Vec<payloads::PayloadStatus>, String> {
+    tauri::async_runtime::spawn_blocking(move || Ok(payloads::inspect(&configuration)))
+        .await
+        .map_err(|error| error.to_string())?
+}
+
+#[tauri::command]
+async fn identify_jar(path: String) -> Result<PayloadId, String> {
     tauri::async_runtime::spawn_blocking(move || {
-        payloads::ensure_layout()?;
-        let bundled = |id| find_bundled_jar(&app, id);
-        Ok(payloads::inspect(&configuration, detect, &bundled))
+        payloads::identify_jar(&PathBuf::from(payloads::expand_user_path(&path)))
     })
     .await
     .map_err(|error| error.to_string())?
@@ -1121,12 +1084,13 @@ fn pick_dll_file() -> Result<Option<String>, String> {
 }
 
 #[tauri::command]
-fn pick_jar_file() -> Result<Option<String>, String> {
-    let selected = rfd::FileDialog::new()
+async fn pick_jar_file() -> Result<Option<String>, String> {
+    let selected = rfd::AsyncFileDialog::new()
         .add_filter("Java Archives", &["jar"])
-        .pick_file();
+        .pick_file()
+        .await;
 
-    Ok(selected.map(|path| path.to_string_lossy().to_string()))
+    Ok(selected.map(|file| file.path().to_string_lossy().to_string()))
 }
 
 fn validate_external_url(url: &str) -> Result<tauri::Url, String> {
@@ -1188,6 +1152,7 @@ fn main() {
             ensure_payload_assets,
             configure_payloads,
             inspect_payloads,
+            identify_jar,
             reveal_in_explorer,
             build_and_install_fdp_assets,
             pick_dll_file,
@@ -1229,15 +1194,10 @@ mod settings_tests {
     }
 
     #[test]
-    fn a_legacy_file_heals_into_real_jar_paths() {
+    fn previous_settings_keep_the_original_jar_location() {
         let settings = parse_settings(&with_utf8_bom(LEGACY)).unwrap().healed();
-        assert!(!settings.payloads.visuals_jar.is_empty());
-        assert!(!settings.payloads.visuals_jar.contains('%'));
-        assert!(settings
-            .payloads
-            .visuals_jar
-            .ends_with(r".zywl\visuals\release.jar"));
-        assert_eq!(settings.payloads.selected, vec![PayloadId::Visuals]);
+        assert!(settings.payloads.visuals_jar.is_empty());
+        assert_eq!(settings.payloads.fdpclient_jar, r"C:\old\release.jar");
     }
 
     #[test]
@@ -1247,10 +1207,7 @@ mod settings_tests {
             settings.injection_method,
             InjectionMethod::Standard
         ));
-        assert!(settings
-            .payloads
-            .fdpclient_jar
-            .ends_with(r".zywl\fdpclient\release.jar"));
+        assert!(settings.payloads.fdpclient_jar.is_empty());
     }
 
     #[test]

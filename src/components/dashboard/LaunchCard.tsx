@@ -152,7 +152,7 @@ export function LaunchCard({
           icon={<Download size={14} />}
           onClick={onPrepareAssets}
         >
-          {assetState === 'ready' ? 'Verify files' : 'Install files'}
+          {assetState === 'ready' ? 'Verify files' : 'Check files'}
         </Button>
         <Button variant="ghost" size="sm" icon={<FileCog size={14} />} onClick={onConfigureJar}>
           JAR

@@ -8,7 +8,6 @@ use std::{
 use serde::{Deserialize, Serialize};
 
 const RESULT_TIMEOUT: Duration = Duration::from_secs(30);
-const LARGEST_JAR_BYTES: u64 = 600 * 1024 * 1024;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
@@ -139,6 +138,32 @@ pub fn validate_jar(source: &Path, id: PayloadId) -> Result<(), String> {
     }
 }
 
+pub fn identify_jar(source: &Path) -> Result<PayloadId, String> {
+    if !source.is_file() {
+        return Err(format!("JAR not found: {}", source.display()));
+    }
+    for id in [
+        PayloadId::Fdplunar,
+        PayloadId::Visuals,
+        PayloadId::Fdpclient,
+    ] {
+        if validate_jar(source, id).is_ok() {
+            return Ok(id);
+        }
+    }
+    if let Ok(file) = fs::File::open(source) {
+        if let Ok(mut archive) = zip::ZipArchive::new(file) {
+            if manifest_value(&mut archive, "FMLCorePlugin").is_some() {
+                return Err(
+                    "This is the Forge mod JAR. For Lunar, choose the FDPClient Inject download."
+                        .into(),
+                );
+            }
+        }
+    }
+    Err("This JAR is not a supported project. Choose an FDPClient Inject or Julia JAR.".into())
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
 pub struct PayloadConfiguration {
@@ -203,12 +228,15 @@ pub fn expand_user_path(raw: &str) -> String {
     expanded
 }
 
-fn resolve_or_default(raw: &str, id: PayloadId) -> String {
+fn resolve_user_path(raw: &str) -> String {
     let expanded = expand_user_path(raw);
     if expanded.is_empty() {
-        jar_path(id).to_string_lossy().into_owned()
-    } else {
         expanded
+    } else {
+        std::path::absolute(&expanded)
+            .unwrap_or_else(|_| PathBuf::from(&expanded))
+            .to_string_lossy()
+            .into_owned()
     }
 }
 
@@ -217,11 +245,9 @@ impl Default for PayloadConfiguration {
         Self {
             selected: vec![PayloadId::Visuals],
             allow_multiple: false,
-            visuals_jar: jar_path(PayloadId::Visuals).to_string_lossy().into_owned(),
-            fdpclient_jar: jar_path(PayloadId::Fdpclient)
-                .to_string_lossy()
-                .into_owned(),
-            fdp_lunar_jar: jar_path(PayloadId::Fdplunar).to_string_lossy().into_owned(),
+            visuals_jar: String::new(),
+            fdpclient_jar: String::new(),
+            fdp_lunar_jar: String::new(),
         }
     }
 }
@@ -252,9 +278,9 @@ impl PayloadConfiguration {
     }
 
     pub fn with_resolved_paths(mut self) -> Self {
-        self.visuals_jar = resolve_or_default(&self.visuals_jar, PayloadId::Visuals);
-        self.fdpclient_jar = resolve_or_default(&self.fdpclient_jar, PayloadId::Fdpclient);
-        self.fdp_lunar_jar = resolve_or_default(&self.fdp_lunar_jar, PayloadId::Fdplunar);
+        self.visuals_jar = resolve_user_path(&self.visuals_jar);
+        self.fdpclient_jar = resolve_user_path(&self.fdpclient_jar);
+        self.fdp_lunar_jar = resolve_user_path(&self.fdp_lunar_jar);
         self
     }
 
@@ -268,30 +294,19 @@ impl PayloadConfiguration {
         if selected.is_empty() {
             selected.push(PayloadId::Visuals);
         }
-        if !self.allow_multiple || selected.contains(&PayloadId::Fdplunar) {
+        if selected.contains(&PayloadId::Fdplunar) {
+            selected = vec![PayloadId::Fdplunar];
+        } else if !self.allow_multiple {
             selected.truncate(1);
         }
         self.selected = selected;
-        for id in PayloadId::ALL {
-            let given = PathBuf::from(resolve_or_default(self.source(id), id));
-            let installed = jar_path(id);
-            if !installed.is_file() && validate_jar(&given, id).is_ok() {
-                let _ = copy_with_backup(&given, &installed);
-            }
-            let path = installed.to_string_lossy().into_owned();
-            match id {
-                PayloadId::Visuals => self.visuals_jar = path,
-                PayloadId::Fdpclient => self.fdpclient_jar = path,
-                PayloadId::Fdplunar => self.fdp_lunar_jar = path,
-            }
-        }
-        self
+        self.with_resolved_paths()
     }
 }
 
 pub fn ensure_layout() -> Result<(), String> {
-    let mut folders = vec![root().join("injector")];
-    folders.extend(PayloadId::ALL.iter().map(|id| root().join(id.id())));
+    let folders = vec![root().join("injector")];
+    // JARs remain in their selected locations; only injector state needs a folder.
     for folder in folders {
         fs::create_dir_all(&folder)
             .map_err(|error| format!("Could not create {}: {error}", folder.display()))?;
@@ -304,12 +319,10 @@ pub fn ensure_layout() -> Result<(), String> {
 pub struct PayloadStatus {
     pub id: PayloadId,
     pub path: String,
-    pub install_path: String,
     pub state: &'static str,
     pub message: String,
     pub size_bytes: u64,
     pub modified_ms: u64,
-    pub detected: bool,
 }
 
 fn modified_ms(metadata: &fs::Metadata) -> u64 {
@@ -321,98 +334,20 @@ fn modified_ms(metadata: &fs::Metadata) -> u64 {
         .unwrap_or(0)
 }
 
-fn search_directories() -> Vec<PathBuf> {
-    let mut directories = Vec::new();
-    if let Some(folder) = std::env::current_exe()
-        .ok()
-        .and_then(|exe| exe.parent().map(PathBuf::from))
-    {
-        directories.push(folder);
-    }
-    if let Some(config) = dirs::config_dir() {
-        directories.push(config.join(".minecraft").join("mods"));
-    }
-    if let Some(desktop) = dirs::desktop_dir() {
-        directories.push(desktop);
-    }
-    if let Some(downloads) = dirs::download_dir() {
-        directories.push(downloads);
-    }
-    directories
-}
-
-fn is_candidate(path: &Path) -> bool {
-    path.extension()
-        .and_then(|extension| extension.to_str())
-        .is_some_and(|extension| extension.eq_ignore_ascii_case("jar"))
-        && fs::metadata(path)
-            .is_ok_and(|metadata| metadata.is_file() && metadata.len() <= LARGEST_JAR_BYTES)
-}
-
-fn find_jar(id: PayloadId) -> Option<PathBuf> {
-    let mut newest: Option<(u64, PathBuf)> = None;
-    for directory in search_directories() {
-        let Ok(entries) = fs::read_dir(directory) else {
-            continue;
-        };
-        for entry in entries.flatten() {
-            let path = entry.path();
-            if !is_candidate(&path) || validate_jar(&path, id).is_err() {
-                continue;
-            }
-            let stamp = fs::metadata(&path)
-                .map(|metadata| modified_ms(&metadata))
-                .unwrap_or(0);
-            if newest.as_ref().is_none_or(|(best, _)| stamp > *best) {
-                newest = Some((stamp, path));
-            }
-        }
-    }
-    newest.map(|(_, path)| path)
-}
-
-pub fn adopt_missing<F>(id: PayloadId, bundled: &F) -> bool
-where
-    F: Fn(PayloadId) -> Option<PathBuf>,
-{
-    let installed = jar_path(id);
-    if installed.is_file() {
-        return false;
-    }
-    let source = bundled(id)
-        .filter(|path| validate_jar(path, id).is_ok())
-        .or_else(|| find_jar(id));
-    match source {
-        Some(source) => copy_with_backup(&source, &installed).is_ok(),
-        None => false,
-    }
-}
-
-pub fn inspect<F>(
-    configuration: &PayloadConfiguration,
-    detect: bool,
-    bundled: &F,
-) -> Vec<PayloadStatus>
-where
-    F: Fn(PayloadId) -> Option<PathBuf>,
-{
+pub fn inspect(configuration: &PayloadConfiguration) -> Vec<PayloadStatus> {
     PayloadId::ALL
         .iter()
         .map(|&id| {
-            let installed = jar_path(id);
-            let mut path = PathBuf::from(resolve_or_default(configuration.source(id), id));
-            let detected = detect && adopt_missing(id, bundled);
-            if detect && !path.is_file() {
-                path = installed.clone();
-            }
-            let label = id.label();
-            let metadata = fs::metadata(&path)
-                .ok()
-                .filter(|metadata| metadata.is_file());
+            let path = PathBuf::from(resolve_user_path(configuration.source(id)));
+            let metadata = fs::metadata(&path).ok().filter(|m| m.is_file());
             let (state, message) = match &metadata {
                 None => (
                     "missing",
-                    format!("No {label} JAR yet. Choose the file and it is copied here."),
+                    format!(
+                        "Choose the {} JAR from any folder. Selected path: {}",
+                        id.label(),
+                        path.display()
+                    ),
                 ),
                 Some(_) => match validate_jar(&path, id) {
                     Ok(()) => ("ready", String::new()),
@@ -422,12 +357,10 @@ where
             PayloadStatus {
                 id,
                 path: path.to_string_lossy().into_owned(),
-                install_path: installed.to_string_lossy().into_owned(),
                 state,
                 message,
-                size_bytes: metadata.as_ref().map_or(0, |metadata| metadata.len()),
+                size_bytes: metadata.as_ref().map_or(0, |m| m.len()),
                 modified_ms: metadata.as_ref().map_or(0, modified_ms),
-                detected,
             }
         })
         .collect()
@@ -490,35 +423,24 @@ pub fn copy_with_backup(source: &Path, target: &Path) -> Result<(), String> {
     fs::rename(&incoming, target).map_err(|e| in_use_hint(e, target))
 }
 
-pub fn install(configuration: &PayloadConfiguration) -> Result<Vec<(PayloadId, PathBuf)>, String> {
+pub fn resolve_selected(
+    configuration: &PayloadConfiguration,
+) -> Result<Vec<(PayloadId, PathBuf)>, String> {
     configuration.validate()?;
-    ensure_layout()?;
-    for &id in &configuration.selected {
-        let source = Path::new(configuration.source(id));
-        if !source.is_file() {
-            return Err(format!(
-                "The {} JAR is missing from {}. Choose the file in the JAR window.",
-                id.label(),
-                source.display()
-            ));
-        }
-        validate_jar(source, id)?;
-    }
-    for id in PayloadId::ALL {
-        if !configuration.selected.contains(&id) {
-            let source = Path::new(configuration.source(id));
-            if validate_jar(source, id).is_ok() {
-                let _ = copy_with_backup(source, &jar_path(id));
-            }
-        }
-    }
     configuration
         .selected
         .iter()
         .map(|&id| {
-            let destination = jar_path(id);
-            copy_with_backup(Path::new(configuration.source(id)), &destination)?;
-            Ok((id, destination))
+            let source = PathBuf::from(resolve_user_path(configuration.source(id)));
+            if !source.is_file() {
+                return Err(format!(
+                    "The selected {} JAR was not found at {}. Choose it again in the JAR window.",
+                    id.label(),
+                    source.display()
+                ));
+            }
+            validate_jar(&source, id)?;
+            Ok((id, source))
         })
         .collect()
 }
@@ -545,7 +467,12 @@ pub fn plan_text(
             );
         }
         let value = path.to_str().ok_or("The JAR path is not valid Unicode.")?;
-        if value.contains(['\r', '\n', '"']) || value.encode_utf16().count() >= 259 {
+        let limit = if *id == PayloadId::Fdplunar {
+            32766
+        } else {
+            259
+        };
+        if value.contains(['\r', '\n', '"']) || value.encode_utf16().count() >= limit {
             return Err(
                 "The JAR path is too long or has characters the Windows loader cannot read.".into(),
             );
@@ -712,24 +639,34 @@ mod tests {
     }
 
     #[test]
-    fn blank_paths_heal_to_the_install_folder() {
-        let healed = PayloadConfiguration {
-            selected: vec![],
-            allow_multiple: false,
-            visuals_jar: String::new(),
-            fdpclient_jar: "   ".into(),
-            fdp_lunar_jar: String::new(),
+    fn blank_paths_stay_unset_without_an_installed_jar_fallback() {
+        let config = PayloadConfiguration {
+            selected: vec![PayloadId::Fdplunar],
+            fdp_lunar_jar: "   ".into(),
+            ..Default::default()
         }
         .healed();
-        assert_eq!(healed.selected, vec![PayloadId::Visuals]);
+        assert!(config.visuals_jar.is_empty());
+        assert!(config.fdp_lunar_jar.is_empty());
+        assert!(resolve_selected(&config).is_err());
         assert_eq!(
-            healed.visuals_jar,
-            jar_path(PayloadId::Visuals).to_string_lossy()
+            inspect(&config)
+                .iter()
+                .find(|s| s.id == PayloadId::Fdplunar)
+                .unwrap()
+                .state,
+            "missing"
         );
-        assert_eq!(
-            healed.fdpclient_jar,
-            jar_path(PayloadId::Fdpclient).to_string_lossy()
-        );
+    }
+
+    #[test]
+    fn a_saved_inject_selection_is_not_replaced_by_julia() {
+        let config = PayloadConfiguration {
+            selected: vec![PayloadId::Visuals, PayloadId::Fdplunar],
+            ..Default::default()
+        }
+        .healed();
+        assert_eq!(config.selected, vec![PayloadId::Fdplunar]);
     }
 
     #[test]
@@ -751,25 +688,29 @@ mod tests {
     }
 
     #[test]
-    fn inspecting_never_returns_a_placeholder_path() {
-        let statuses = inspect(
-            &PayloadConfiguration {
-                selected: vec![PayloadId::Visuals],
-                allow_multiple: false,
-                visuals_jar: r"%USERPROFILE%\.zywl\visuals\release.jar".into(),
-                fdpclient_jar: String::new(),
-                fdp_lunar_jar: String::new(),
-            },
-            false,
-            &|_| None,
-        );
+    fn inspecting_resolves_selected_paths_and_keeps_unset_paths_empty() {
+        let statuses = inspect(&PayloadConfiguration {
+            selected: vec![PayloadId::Visuals],
+            allow_multiple: false,
+            visuals_jar: r"%USERPROFILE%\.zywl\visuals\release.jar".into(),
+            fdpclient_jar: String::new(),
+            fdp_lunar_jar: String::new(),
+        });
         assert_eq!(statuses.len(), PayloadId::ALL.len());
         let home = dirs::home_dir().unwrap();
         for status in statuses {
             assert!(!status.path.contains('%'), "{}", status.path);
-            assert!(!status.path.is_empty());
-            let expected = home.join(".zywl").join(status.id.id()).join("release.jar");
-            assert_eq!(status.install_path, expected.to_string_lossy());
+            if status.id == PayloadId::Visuals {
+                assert_eq!(
+                    status.path,
+                    home.join(".zywl")
+                        .join("visuals")
+                        .join("release.jar")
+                        .to_string_lossy()
+                );
+            } else {
+                assert!(status.path.is_empty());
+            }
         }
     }
 
@@ -787,7 +728,7 @@ mod tests {
     }
 
     #[test]
-    fn a_jar_kept_elsewhere_is_replaced_by_the_project_folder() {
+    fn custom_paths_are_preserved_even_when_the_file_is_missing() {
         let healed = PayloadConfiguration {
             selected: vec![PayloadId::Fdpclient],
             allow_multiple: false,
@@ -796,27 +737,86 @@ mod tests {
             fdp_lunar_jar: r"C:\does\not\exist\fdp-lunar.jar".into(),
         }
         .healed();
-        assert_eq!(
-            healed.visuals_jar,
-            jar_path(PayloadId::Visuals).to_string_lossy()
-        );
-        assert_eq!(
-            healed.fdpclient_jar,
-            jar_path(PayloadId::Fdpclient).to_string_lossy()
-        );
+        assert_eq!(healed.visuals_jar, r"C:\does\not\exist\visuals.jar");
+        assert_eq!(healed.fdpclient_jar, r"C:\does\not\exist\fdp.jar");
+        assert_eq!(healed.fdp_lunar_jar, r"C:\does\not\exist\fdp-lunar.jar");
     }
 
     fn jar(name: &str, entries: &[(&str, &str)]) -> PathBuf {
         let path = std::env::temp_dir().join(format!("zavz-{}-{name}.jar", std::process::id()));
         let mut writer = zip::ZipWriter::new(fs::File::create(&path).unwrap());
         let options = zip::write::SimpleFileOptions::default()
-            .compression_method(zip::CompressionMethod::Stored);
+            .compression_method(zip::CompressionMethod::Deflated);
         for (entry, text) in entries {
             writer.start_file(*entry, options).unwrap();
             std::io::Write::write_all(&mut writer, text.as_bytes()).unwrap();
         }
         writer.finish().unwrap();
         path
+    }
+
+    fn native_jar(name: &str) -> PathBuf {
+        jar(name, &[
+            ("META-INF/MANIFEST.MF", "Manifest-Version: 1.0\r\nAgent-Class: net.ccbluex.liquidbounce.injection.bootstrap.LunarAgent\r\nFDP-Lunar-Bundle: 1.8.9\r\nFDP-Payload-Resource: FDPClient.jar\r\n\r\n"),
+            ("net/ccbluex/liquidbounce/injection/bootstrap/LunarAgent.class", ""),
+            ("FDPClient.jar", "fixture payload"),
+        ])
+    }
+
+    #[test]
+    fn compressed_inject_jars_are_detected_by_content_after_renaming() {
+        let path = native_jar("renamed client espaço ç");
+        assert_eq!(identify_jar(&path).unwrap(), PayloadId::Fdplunar);
+        assert!(validate_jar(&path, PayloadId::Fdplunar).is_ok());
+        assert!(validate_jar(&path, PayloadId::Visuals).is_err());
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn selected_external_jar_survives_reload_and_is_used_directly_in_the_plan() {
+        let supplied = std::env::var_os("ZAVZ_TEST_INJECT_JAR").map(PathBuf::from);
+        let path = supplied
+            .clone()
+            .unwrap_or_else(|| native_jar("outside the install folder"));
+        let config = PayloadConfiguration {
+            selected: vec![PayloadId::Fdplunar],
+            fdp_lunar_jar: path.to_string_lossy().into_owned(),
+            ..Default::default()
+        };
+        let saved = serde_json::to_vec(&config.healed()).unwrap();
+        let loaded: PayloadConfiguration = serde_json::from_slice(&saved).unwrap();
+        let loaded = loaded.healed();
+        assert_eq!(loaded.selected, vec![PayloadId::Fdplunar]);
+        assert_eq!(Path::new(&loaded.fdp_lunar_jar), path.as_path());
+        let files = resolve_selected(&loaded).unwrap();
+        assert_eq!(files, vec![(PayloadId::Fdplunar, path.clone())]);
+        assert!(plan_text(42, &loaded, &files)
+            .unwrap()
+            .contains(&format!("jar={}", loaded.fdp_lunar_jar)));
+        let status = inspect(&loaded)
+            .into_iter()
+            .find(|s| s.id == PayloadId::Fdplunar)
+            .unwrap();
+        assert_eq!(status.state, "ready");
+        assert_eq!(Path::new(&status.path), path.as_path());
+        if supplied.is_none() {
+            let _ = fs::remove_file(path);
+        }
+    }
+
+    #[test]
+    fn forge_mods_receive_an_actionable_error_instead_of_a_missing_file_error() {
+        let path = jar(
+            "forge mod",
+            &[(
+                "META-INF/MANIFEST.MF",
+                "Manifest-Version: 1.0\r\nFMLCorePlugin: example.ForgeLoader\r\n\r\n",
+            )],
+        );
+        let error = identify_jar(&path).unwrap_err();
+        assert!(error.contains("Forge mod"));
+        assert!(error.contains("FDPClient Inject"));
+        let _ = fs::remove_file(path);
     }
 
     #[test]

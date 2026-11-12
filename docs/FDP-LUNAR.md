@@ -6,13 +6,13 @@ The **FDPClient Inject** project loads FDPClient during official Lunar Client 1.
 ## Using it
 
 1. Close Minecraft. Remove FDP's `-javaagent` argument from the Lunar profile if it was configured. Keep other JVM arguments.
-2. Open the JAR window in ZAVZ, select **FDPClient Inject**, and choose the current self-contained `fdpclient-inject.jar` bundle. The standalone agent or Forge JAR is not the native bundle.
+2. Open **JAR** in ZAVZ and choose the FDPClient Inject bundle from any folder. ZAVZ recognizes its contents and selects **FDPClient Inject** automatically. Click **Save selection**.
 3. Open the injection window and click **Watch next Lunar startup**.
 4. Start **Lunar Client 1.8.9** from the official launcher. ZAVZ reports success after FDP finishes initializing. With a new FDP configuration, **Right Control** opens its ClickGUI.
 
 The watcher must be armed before the game JVM starts. FDP's mixins add fields and methods, so loading after Minecraft initializes is rejected. The native loader requires Lunar's Java 17 runtime. Other versions and Forge use their existing loading methods.
 
-Manual DLL selection remains available. Use `src/load/fdp-lunar.dll` or **Use bundled FDPClient Inject DLL** in the manual picker; select the JAR separately in the JAR window. The DLL is embedded in `ZAVZ.exe` and materialized under `%USERPROFILE%\.zywl\injector`. The selected bundle is copied to `%USERPROFILE%\.zywl\fdplunar\release.jar` using the existing backup behavior.
+Manual DLL selection remains available. Use `src/load/fdp-lunar.dll` or **Use bundled FDPClient Inject DLL** in the manual picker; select the JAR separately in the JAR window. The DLL is embedded in `ZAVZ.exe` and materialized under `%USERPROFILE%\.zywl\injector`. The JAR stays at the selected path, which is saved and used directly. You can also edit that path in the JAR window. If you move the file, select it again.
 
 Select FDPClient Inject on its own before starting the watcher.
 

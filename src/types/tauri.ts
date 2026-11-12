@@ -56,12 +56,10 @@ export interface PayloadConfiguration {
 export interface PayloadStatus {
   id: PayloadId;
   path: string;
-  installPath: string;
   state: 'ready' | 'missing' | 'invalid';
   message: string;
   sizeBytes: number;
   modifiedMs: number;
-  detected: boolean;
 }
 
 export interface InjectorSettings {
@@ -83,6 +81,7 @@ export interface TauriCommands {
   resolve_loader_dll: (configuration?: PayloadConfiguration) => Promise<string>;
   ensure_payload_assets: (configuration: PayloadConfiguration) => Promise<string>;
   configure_payloads: (configuration: PayloadConfiguration) => Promise<PayloadConfiguration>;
+  identify_jar: (path: string) => Promise<PayloadId>;
   build_and_install_fdp_assets: () => Promise<string>;
   pick_dll_file: () => Promise<string | null>;
   get_settings: () => Promise<InjectorSettings>;

@@ -94,17 +94,17 @@ std::string agentArgument(const std::filesystem::path& jar) {
     int wideSize = MultiByteToWideChar(CP_ACP, 0, encoded.data(), size, nullptr, 0);
     std::wstring decoded(static_cast<size_t>(wideSize), L'\0');
     MultiByteToWideChar(CP_ACP, 0, encoded.data(), size, decoded.data(), wideSize);
-    if (decoded != path) throw std::runtime_error("This Java runtime cannot encode the selected path. Use ZAVZ's installed JAR path");
+    if (decoded != path) throw std::runtime_error("This Java runtime cannot encode the selected path. Move the JAR to a supported path and select it again");
     return encoded;
 }
 
-bool requireLunarBeforeMinecraft(JavaVM* vm, JNIEnv* env) {
+bool requireLunar(JavaVM* vm, JNIEnv* env) {
     if (string(env, property(env, "java.specification.version")) != "17")
         throw std::runtime_error("The native FDPClient Inject loader requires Lunar's Java 17 runtime");
     if (string(env, property(env, "java.class.path")).find("lunar-platform-mappings-v1_8.jar") == std::string::npos)
         throw std::runtime_error("Select Lunar Client 1.8.9; this DLL does not support Forge or other game versions");
     if (!string(env, property(env, "fdpclient.lunar.agentRegistered")).empty())
-        throw std::runtime_error("FDP is already loaded. Remove its -javaagent argument and restart Lunar before native injection");
+        throw std::runtime_error("FDPClient is already loaded in this game process");
     jvmtiEnv* ti = nullptr;
     if (vm->GetEnv(reinterpret_cast<void**>(&ti), JVMTI_VERSION_1_2) != JNI_OK || !ti)
         throw std::runtime_error("The game JVM has no JVMTI interface");
@@ -112,22 +112,20 @@ bool requireLunarBeforeMinecraft(JavaVM* vm, JNIEnv* env) {
     jclass* classes = nullptr;
     if (ti->GetLoadedClasses(&count, &classes) != JVMTI_ERROR_NONE) {
         ti->DisposeEnvironment();
-        throw std::runtime_error("Could not inspect the game startup phase");
+        throw std::runtime_error("Could not inspect the Lunar game JVM");
     }
-    bool lunar = false, minecraft = false;
+    bool lunar = false;
     for (jint index = 0; index < count; ++index) {
         char* signature = nullptr;
         if (ti->GetClassSignature(classes[index], &signature, nullptr) == JVMTI_ERROR_NONE && signature) {
             std::string name(signature);
             lunar |= name.rfind("Lcom/moonsworth/lunar/genesis/", 0) == 0;
-            minecraft |= name.rfind("Lnet/minecraft/", 0) == 0 && name.rfind("Lnet/minecraft/launchwrapper/", 0) != 0;
             ti->Deallocate(reinterpret_cast<unsigned char*>(signature));
         }
         env->DeleteLocalRef(classes[index]);
     }
     ti->Deallocate(reinterpret_cast<unsigned char*>(classes));
     ti->DisposeEnvironment();
-    if (minecraft) throw std::runtime_error("Injection arrived after Minecraft initialized. Start the ZAVZ Lunar watcher before launching the game");
     return lunar;
 }
 
@@ -213,7 +211,7 @@ DWORD WINAPI load(LPVOID) {
         if (!jar.is_absolute() || !std::filesystem::is_regular_file(jar) || jar.native().find(L'=') != std::wstring::npos)
             throw std::runtime_error("The selected Lunar JAR path is invalid or contains '='");
         ULONGLONG genesisDeadline = GetTickCount64() + 15000;
-        while (!requireLunarBeforeMinecraft(vm, env)) {
+        while (!requireLunar(vm, env)) {
             if (GetTickCount64() >= genesisDeadline) throw std::runtime_error("Lunar's Genesis loader did not start");
             Sleep(10);
         }

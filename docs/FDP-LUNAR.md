@@ -1,20 +1,22 @@
 <!-- FDPClient Lunar native loader by opZywl | https://lucas-lima.xyz -->
-# FDPClient Inject startup loader
+# FDPClient Inject
 
-The **FDPClient Inject** project loads FDPClient during official Lunar Client 1.8.9 startup. ZAVZ includes its native DLL and also supports Julia.
+**FDPClient Inject** loads FDPClient into official Lunar Client 1.8.9, including an already running game. ZAVZ includes its native DLL and also supports Julia.
 
 ## Using it
 
-1. Close Minecraft. Remove FDP's `-javaagent` argument from the Lunar profile if it was configured. Keep other JVM arguments.
+1. Open official **Lunar Client 1.8.9**. Stay in the menu, singleplayer, or multiplayer.
 2. Open **JAR** in ZAVZ and choose the FDPClient Inject bundle from any folder. ZAVZ recognizes its contents and selects **FDPClient Inject** automatically. Click **Save selection**.
-3. Open the injection window and click **Watch next Lunar startup**.
-4. Start **Lunar Client 1.8.9** from the official launcher. ZAVZ reports success after FDP finishes initializing. With a new FDP configuration, **Right Control** opens its ClickGUI.
+3. Click **Inject**, then **Inject into running Lunar**. Select the Lunar process and click **Inject**.
+4. Keep ZAVZ open until it confirms that FDP loaded. With a new FDP configuration, **Right Control** opens the ClickGUI.
 
-The watcher must be armed before the game JVM starts. FDP's mixins add fields and methods, so loading after Minecraft initializes is rejected. The native loader requires Lunar's Java 17 runtime. Other versions and Forge use their existing loading methods.
+Use a current runtime-compatible FDPClient Inject bundle for an open game. Older startup-only bundles are still selectable; use **Watch next Lunar startup** before launching the game, or select a current bundle. The native loader requires Lunar's Java 17 runtime. Forge keeps its normal mod loading method.
 
-Manual DLL selection remains available. Use `src/load/fdp-lunar.dll` or **Use bundled FDPClient Inject DLL** in the manual picker; select the JAR separately in the JAR window. The DLL is embedded in `ZAVZ.exe` and materialized under `%USERPROFILE%\.zywl\injector`. The JAR stays at the selected path, which is saved and used directly. You can also edit that path in the JAR window. If you move the file, select it again.
+The optional watcher keeps waiting for new game instances and reports readiness after FDP initializes. Existing game processes are skipped when the watcher starts, and each new instance is attempted only once. Running-game injection is available separately through **Inject into running Lunar**.
 
-Select FDPClient Inject on its own before starting the watcher.
+Manual DLL selection remains available through **Choose DLL**. Use `src/load/fdp-lunar.dll` or leave the bundled loader selected; choose the JAR separately in the JAR window. The DLL is embedded in `ZAVZ.exe` and materialized under `%USERPROFILE%\.zywl\injector` with a content hash, so an older loaded DLL does not block an update. The JAR stays at its selected path. If you move it, select it again.
+
+Select FDPClient Inject on its own. A game process that already has FDP loaded needs to be restarted before loading another build.
 
 ## Updating and building
 
@@ -37,4 +39,4 @@ When both source checkouts are siblings, FDPClient's `native/lunar/build-zavz.ps
 
 ## Diagnostics
 
-Each load uses `%USERPROFILE%\.zywl\injector\plans\<pid>.ini`. Its result becomes `ok` only after FDP confirms readiness. ZAVZ consumes the result and removes the completed plan. Failures identify unsupported bundles, wrong JVMs, duplicate agents or missed startup timing. Game-side details remain in Lunar's profile logs. Native GUI browser issues within FDP's NextGen style are independent of DLL delivery.
+Each load uses `%USERPROFILE%\.zywl\injector\plans\<pid>.ini`. Its result becomes `ok` only after FDP confirms readiness. Runtime delivery preserves the loaded class schemas and stores mixin additions in companion classes. FDP preload and resource initialization use Minecraft's task queue; failed attachment disables the hooks and restores the original loaded definitions. Game-side details remain in Lunar's profile logs. Native GUI browser issues within FDP's NextGen style are independent of DLL delivery.

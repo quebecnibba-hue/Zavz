@@ -8,6 +8,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Fixed
+- Support the current FDPClient Inject runtime attachment contract and reject startup-only bundles before loading a DLL into an open game.
+- Preserve optional startup loading and manual DLL selection alongside the running Lunar process picker.
+- Materialize bundled Lunar DLLs by content hash so a previously loaded version does not prevent updates.
+- Display startup watcher progress and retain the selected project when reopening the injector.
+- Skip existing Lunar processes when arming the watcher and prevent repeated attempts in the same game instance.
 - Read compressed JAR manifests so downloaded FDPClient Inject and Julia builds are recognized.
 - Preserve selected JAR locations when saving, reopening and injecting, without copying to a required folder.
 - Select the project by JAR contents and ignore stale inspection results that could restore Julia.

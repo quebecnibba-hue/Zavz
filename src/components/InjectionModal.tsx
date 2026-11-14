@@ -17,7 +17,7 @@ import {
   Zap,
 } from 'lucide-react';
 import { Button } from './ui/Button';
-import type { InjectMode, InjectOptions, MinecraftClientInfo } from '../types/tauri';
+import type { InjectMode, InjectOptions, MinecraftClientInfo, WatcherStatus } from '../types/tauri';
 
 type Step = 'select' | 'manual' | 'detect' | 'injecting' | 'error' | 'success';
 type DetectSelection = 'all' | number;
@@ -34,8 +34,11 @@ interface InjectionModalProps {
   setDllPath: (path: string) => void;
   fdpMode: boolean;
   setFdpMode: (mode: boolean) => void;
-  lunarStartup?: boolean;
-  onStartLunar?: () => Promise<void>;
+  fdpInject?: boolean;
+  watcherActive?: boolean;
+  watcherStatus?: WatcherStatus | null;
+  onStartLunar?: (dllPath?: string) => Promise<void>;
+  onStopLunar?: () => Promise<void>;
 }
 
 interface SelectedDll {
@@ -65,8 +68,11 @@ export function InjectionModal({
   setDllPath,
   fdpMode: _fdpMode,
   setFdpMode,
-  lunarStartup = false,
+  fdpInject = false,
+  watcherActive = false,
+  watcherStatus,
   onStartLunar,
+  onStopLunar,
 }: InjectionModalProps) {
   const [step, setStep] = useState<Step>('select');
   const [startingLunar, setStartingLunar] = useState(false);
@@ -103,18 +109,24 @@ export function InjectionModal({
     setClients([]);
     setDetectSelection('all');
     setInjectOptions(undefined);
-  }, [isOpen]);
+  }, [isOpen, fdpInject]);
 
   const fetchClients = useCallback(async () => {
     setClientsLoading(true);
     setDetectError('');
     try {
       const result = await invoke<MinecraftClientInfo[]>('list_minecraft_clients');
-      const list = result || [];
+      const list = fdpInject
+        ? (result || []).filter((client) => client.kind === 'lunar')
+        : result || [];
       setClients(list);
-      setDetectSelection('all');
+      setDetectSelection(fdpInject && list.length > 0 ? list[0].pid : 'all');
       if (list.length === 0) {
-        setDetectError('No Minecraft clients found.');
+        setDetectError(
+          fdpInject
+            ? 'Lunar Client is not open. Launch Lunar 1.8.9 and refresh the list.'
+            : 'No Minecraft clients found.'
+        );
       }
     } catch (reason) {
       setClients([]);
@@ -122,7 +134,7 @@ export function InjectionModal({
     } finally {
       setClientsLoading(false);
     }
-  }, []);
+  }, [fdpInject]);
 
   useEffect(() => {
     if (!isOpen || step !== 'detect') return;
@@ -255,9 +267,15 @@ export function InjectionModal({
     }
 
     if (detectSelection === 'all') {
-      setInjectOptions({ pids: clients.map((client) => client.pid) });
+      setInjectOptions({
+        pids: clients.map((client) => client.pid),
+        ...(selectedFile ? { dllPath: selectedFile.path } : {}),
+      });
     } else {
-      setInjectOptions({ target: String(detectSelection) });
+      setInjectOptions({
+        target: String(detectSelection),
+        ...(selectedFile ? { dllPath: selectedFile.path } : {}),
+      });
     }
 
     setFdpMode(true);
@@ -268,11 +286,15 @@ export function InjectionModal({
 
   const title =
     step === 'select'
-      ? 'Select injection mode'
+      ? fdpInject
+        ? 'FDPClient Inject'
+        : 'Select injection mode'
       : step === 'manual'
         ? 'Manual payload'
         : step === 'detect'
-          ? 'Detect clients'
+          ? fdpInject
+            ? 'Select Lunar process'
+            : 'Detect clients'
           : step === 'error'
             ? 'Injection failed'
             : 'Injection';
@@ -315,27 +337,86 @@ export function InjectionModal({
         )}
 
         <div className="ds-injection-body">
-          {step === 'select' && lunarStartup && (
+          {step === 'select' && fdpInject && (
             <div className="ds-manual-payload">
               <p className="ds-field-help">
-                Choose the current FDPClient Inject JAR, start this watcher, then launch Lunar 1.8.9
-                without -javaagent.
+                Open Lunar Client 1.8.9 and inject from the menu, singleplayer, or multiplayer.
+                Select the current FDPClient Inject JAR in the JAR window first.
               </p>
+              <Button
+                disabled={watcherActive || startingLunar || isPickingFile}
+                icon={<Zap size={16} />}
+                onClick={() => {
+                  setFdpMode(true);
+                  setActiveMode('detect');
+                  setDetectError('');
+                  setStep('detect');
+                }}
+              >
+                Inject into running Lunar
+              </Button>
+              {watcherStatus && (
+                <div className="ds-process-state" role="status" aria-live="polite">
+                  {watcherStatus.state === 'success' ? (
+                    <CheckCircle2 size={24} />
+                  ) : watcherStatus.state === 'error' ? (
+                    <AlertTriangle size={24} />
+                  ) : (
+                    <Radar size={24} />
+                  )}
+                  <strong>
+                    {watcherStatus.state === 'success'
+                      ? 'FDPClient Inject loaded'
+                      : watcherStatus.state === 'loading'
+                        ? 'Loading FDPClient Inject'
+                        : watcherStatus.state === 'error'
+                          ? 'Startup failed'
+                          : watcherStatus.state === 'stopped'
+                            ? 'Watcher stopped'
+                            : 'Waiting for the next Lunar startup'}
+                  </strong>
+                  <span>{watcherStatus.message}</span>
+                </div>
+              )}
+              <p className="ds-field-help">
+                DLL: {selectedFile?.path || 'Bundled FDPClient Inject loader'}
+              </p>
+              <div className="ds-modal-inline-actions">
+                <Button
+                  variant="ghost"
+                  loading={isPickingFile}
+                  disabled={watcherActive || startingLunar}
+                  onClick={() => void handleBrowseDll()}
+                >
+                  Choose DLL
+                </Button>
+                {selectedFile && (
+                  <Button
+                    variant="ghost"
+                    disabled={watcherActive || startingLunar}
+                    onClick={() => setSelectedFile(null)}
+                  >
+                    Use bundled DLL
+                  </Button>
+                )}
+              </div>
               <Button
                 variant="secondary"
                 loading={startingLunar}
-                disabled={!onStartLunar}
+                disabled={watcherActive ? !onStopLunar : !onStartLunar}
                 icon={<Radar size={16} />}
                 onClick={() => {
                   setStartingLunar(true);
                   setManualError('');
-                  void onStartLunar?.()
-                    .then(onClose)
-                    .catch((error: unknown) => setManualError(String(error)))
+                  const operation = watcherActive
+                    ? onStopLunar?.()
+                    : onStartLunar?.(selectedFile?.path);
+                  void operation
+                    ?.catch((error: unknown) => setManualError(String(error)))
                     .finally(() => setStartingLunar(false));
                 }}
               >
-                Watch next Lunar startup
+                {watcherActive ? 'Stop watching' : 'Watch next Lunar startup'}
               </Button>
               {manualError && (
                 <p className="ds-field-error" role="alert">
@@ -344,7 +425,7 @@ export function InjectionModal({
               )}
             </div>
           )}
-          {step === 'select' && (
+          {step === 'select' && !fdpInject && (
             <div className="ds-mode-grid">
               <button
                 className="ds-mode-option"
@@ -429,26 +510,6 @@ export function InjectionModal({
               >
                 Browse DLL
               </Button>
-              {lunarStartup && (
-                <Button
-                  variant="secondary"
-                  onClick={() => {
-                    void invoke<string>('resolve_loader_dll', {
-                      configuration: {
-                        selected: ['fdplunar'],
-                        allowMultiple: false,
-                        visualsJar: '',
-                        fdpclientJar: '',
-                        fdpLunarJar: '',
-                      },
-                    })
-                      .then((path) => setManualDll(path, 'fdp-lunar.dll'))
-                      .catch((error: unknown) => setManualError(String(error)));
-                  }}
-                >
-                  Use bundled FDPClient Inject DLL
-                </Button>
-              )}
               {manualError && (
                 <p className="ds-field-error" role="alert">
                   {manualError}
@@ -485,7 +546,11 @@ export function InjectionModal({
                   <div className="ds-process-state">
                     <RefreshCw size={20} className="animate-spin" />
                     <strong>Scanning Minecraft clients…</strong>
-                    <span>Looking for LunarClient, CheatBreaker, Badlion, and more.</span>
+                    <span>
+                      {fdpInject
+                        ? 'Looking for Lunar Client 1.8.9.'
+                        : 'Looking for LunarClient, CheatBreaker, Badlion, and more.'}
+                    </span>
                   </div>
                 )}
 
@@ -494,7 +559,9 @@ export function InjectionModal({
                     <Gamepad2 size={22} />
                     <strong>No clients detected</strong>
                     <span>
-                      Open LunarClient, CheatBreaker, Badlion, CMClient, or Vanilla first.
+                      {fdpInject
+                        ? 'Open Lunar Client 1.8.9 and refresh the list.'
+                        : 'Open LunarClient, CheatBreaker, Badlion, CMClient, or Vanilla first.'}
                     </span>
                   </div>
                 )}

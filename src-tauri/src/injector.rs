@@ -1,4 +1,5 @@
 use std::{
+    collections::HashSet,
     fs,
     path::{Path, PathBuf},
 };
@@ -464,18 +465,8 @@ pub fn resolve_injection_target(target: &str) -> Result<(OwnedProcess, ResolvedT
         return Err("Process name cannot be empty.".to_string());
     }
     if t.eq_ignore_ascii_case("lunar-startup") {
-        let candidates = collect_game_candidates(ClientPrefer::Lunar);
-        let candidate = candidates.iter().find(|p| p.kind == "lunar" && p.title.is_empty())
-            .ok_or("Waiting for a new Lunar game JVM. Start this watcher before launching Lunar 1.8.9.")?;
-        let process = OwnedProcess::from_pid(candidate.pid).map_err(|e| e.to_string())?;
-        return Ok((
-            process,
-            ResolvedTarget {
-                pid: candidate.pid,
-                name: candidate.name.clone(),
-                kind: "lunar".into(),
-            },
-        ));
+        return resolve_next_lunar_startup(&HashSet::new())
+            .map(|(process, target, _)| (process, target));
     }
 
     if let Ok(pid) = t.parse::<u32>() {
@@ -547,10 +538,80 @@ pub fn resolve_injection_target(target: &str) -> Result<(OwnedProcess, ResolvedT
 #[cfg(target_os = "windows")]
 struct GameCand {
     pid: u32,
+    started_at: u64,
     name: String,
     kind: String,
     title: String,
     score: i32,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct GameProcessIdentity {
+    pub pid: u32,
+    pub started_at: u64,
+}
+
+#[cfg(target_os = "windows")]
+impl GameCand {
+    fn identity(&self) -> GameProcessIdentity {
+        GameProcessIdentity {
+            pid: self.pid,
+            started_at: self.started_at,
+        }
+    }
+}
+
+#[cfg(target_os = "windows")]
+fn next_lunar_candidate<'a>(
+    candidates: &'a [GameCand],
+    excluded: &HashSet<GameProcessIdentity>,
+) -> Option<&'a GameCand> {
+    candidates.iter().find(|candidate| {
+        candidate.kind == "lunar"
+            && candidate.title.is_empty()
+            && !excluded.contains(&candidate.identity())
+    })
+}
+
+#[cfg(target_os = "windows")]
+pub fn existing_lunar_processes() -> HashSet<GameProcessIdentity> {
+    collect_game_candidates(ClientPrefer::Lunar)
+        .iter()
+        .filter(|candidate| candidate.kind == "lunar")
+        .map(GameCand::identity)
+        .collect()
+}
+
+#[cfg(target_os = "windows")]
+pub fn resolve_next_lunar_startup(
+    excluded: &HashSet<GameProcessIdentity>,
+) -> Result<(OwnedProcess, ResolvedTarget, GameProcessIdentity), String> {
+    let candidates = collect_game_candidates(ClientPrefer::Lunar);
+    let candidate = next_lunar_candidate(&candidates, excluded).ok_or(
+        "Waiting for the next Lunar startup. Launch Lunar Client 1.8.9 from its official launcher.",
+    )?;
+    let process = OwnedProcess::from_pid(candidate.pid).map_err(|error| error.to_string())?;
+    Ok((
+        process,
+        ResolvedTarget {
+            pid: candidate.pid,
+            name: candidate.name.clone(),
+            kind: "lunar".into(),
+        },
+        candidate.identity(),
+    ))
+}
+
+#[cfg(not(target_os = "windows"))]
+pub fn existing_lunar_processes() -> HashSet<GameProcessIdentity> {
+    HashSet::new()
+}
+
+#[cfg(not(target_os = "windows"))]
+pub fn resolve_next_lunar_startup(
+    _excluded: &HashSet<GameProcessIdentity>,
+) -> Result<(u32, ResolvedTarget, GameProcessIdentity), String> {
+    Err("Lunar startup loading requires Windows.".into())
 }
 
 #[cfg(target_os = "windows")]
@@ -572,12 +633,16 @@ fn collect_game_candidates(prefer: ClientPrefer) -> Vec<GameCand> {
             .process(sysinfo::Pid::from_u32(*pid))
             .map(|p| p.name().to_string())
             .unwrap_or_default();
+        let started_at = system
+            .process(sysinfo::Pid::from_u32(*pid))
+            .map_or(0, sysinfo::Process::start_time);
         if !is_jvm_process_name(&name) {
             continue;
         }
         if title_l.contains("cmclient") {
             cands.push(GameCand {
                 pid: *pid,
+                started_at,
                 name,
                 kind: "cmclient".to_string(),
                 title: title.clone(),
@@ -586,6 +651,7 @@ fn collect_game_candidates(prefer: ClientPrefer) -> Vec<GameCand> {
         } else if title_l.contains("cheatbreaker") || title_l.contains("cheat breaker") {
             cands.push(GameCand {
                 pid: *pid,
+                started_at,
                 name,
                 kind: "cheatbreaker".to_string(),
                 title: title.clone(),
@@ -594,6 +660,7 @@ fn collect_game_candidates(prefer: ClientPrefer) -> Vec<GameCand> {
         } else if title_l.contains("badlion") {
             cands.push(GameCand {
                 pid: *pid,
+                started_at,
                 name,
                 kind: "badlion".to_string(),
                 title: title.clone(),
@@ -612,6 +679,7 @@ fn collect_game_candidates(prefer: ClientPrefer) -> Vec<GameCand> {
             };
             cands.push(GameCand {
                 pid: *pid,
+                started_at,
                 name,
                 kind: kind.to_string(),
                 title: title.clone(),
@@ -672,7 +740,7 @@ fn collect_game_candidates(prefer: ClientPrefer) -> Vec<GameCand> {
             }
         };
 
-        if kind == "lunar" && (title_l.contains("home - lunar") || title_l == "lunar client") {
+        if kind == "lunar" && title_l.contains("home - lunar") {
             continue;
         }
 
@@ -723,6 +791,7 @@ fn collect_game_candidates(prefer: ClientPrefer) -> Vec<GameCand> {
 
         cands.push(GameCand {
             pid,
+            started_at: proc.start_time(),
             name,
             kind,
             title,
@@ -977,4 +1046,53 @@ pub fn inject_dll(
     _method: InjectionMethod,
 ) -> Result<(), String> {
     Err("DLL injection not supported on this platform".to_string())
+}
+
+#[cfg(all(test, target_os = "windows"))]
+mod startup_tests {
+    use super::*;
+
+    fn lunar(pid: u32, started_at: u64, title: &str) -> GameCand {
+        GameCand {
+            pid,
+            started_at,
+            name: "javaw.exe".into(),
+            kind: "lunar".into(),
+            title: title.into(),
+            score: 0,
+        }
+    }
+
+    #[test]
+    fn an_existing_lunar_jvm_is_skipped_even_without_a_window() {
+        let old = lunar(36648, 100, "");
+        let excluded = HashSet::from([old.identity()]);
+        let candidates = [old, lunar(40000, 200, "")];
+        assert_eq!(
+            next_lunar_candidate(&candidates, &excluded).unwrap().pid,
+            40000
+        );
+    }
+
+    #[test]
+    fn an_attempted_instance_is_never_injected_twice_but_a_reused_pid_can_start() {
+        let attempted = lunar(36648, 100, "");
+        let excluded = HashSet::from([attempted.identity()]);
+        assert!(next_lunar_candidate(&[attempted], &excluded).is_none());
+        let restarted = [lunar(36648, 200, "")];
+        assert_eq!(
+            next_lunar_candidate(&restarted, &excluded)
+                .unwrap()
+                .started_at,
+            200
+        );
+    }
+
+    #[test]
+    fn initialized_games_and_other_clients_are_not_startup_targets() {
+        let mut forge = lunar(30000, 200, "");
+        forge.kind = "forge".into();
+        let candidates = [lunar(36648, 200, "Lunar Client 1.8.9"), forge];
+        assert!(next_lunar_candidate(&candidates, &HashSet::new()).is_none());
+    }
 }

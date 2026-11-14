@@ -37,6 +37,7 @@ import type {
   InjectOptions,
   InjectorSettings,
   PayloadConfiguration,
+  WatcherStatus,
 } from './types/tauri';
 import type { InterfacePreferences, NewsItem } from './types/product';
 
@@ -112,6 +113,7 @@ function App() {
   const [autoClose, setAutoClose] = useState(false);
   const [streamerMode, setStreamerMode] = useState(false);
   const [watcherActive, setWatcherActive] = useState(false);
+  const [watcherStatus, setWatcherStatus] = useState<WatcherStatus | null>(null);
   const [systemLog, setSystemLog] = useState(false);
   const [logs, setLogs] = useState<LogEntry[]>([
     { id: 0, time: '--:--:--', message: 'ZAVZ initialized', type: 'system' },
@@ -192,6 +194,27 @@ function App() {
 
     registerListener<string>('watcher-status', 'system');
     registerListener<string>('injection-log', 'info');
+    void listen<WatcherStatus>('watcher-state', (event) => {
+      if (disposed) return;
+      setWatcherStatus(event.payload);
+      if (event.payload.state === 'stopped') setWatcherActive(false);
+      setLaunchState(
+        event.payload.state === 'loading'
+          ? 'working'
+          : event.payload.state === 'success'
+            ? 'success'
+            : event.payload.state === 'error'
+              ? 'error'
+              : 'idle'
+      );
+    })
+      .then((unlisten) => {
+        if (disposed) unlisten();
+        else unlisteners.push(unlisten);
+      })
+      .catch((error: unknown) => {
+        if (!disposed) addLog(`Watcher status unavailable: ${String(error)}`, 'warning');
+      });
 
     return () => {
       disposed = true;
@@ -230,7 +253,7 @@ function App() {
     }
     const canonical = await invoke<PayloadConfiguration>('configure_payloads', { configuration });
     setPayloads(canonical);
-    addLog(`Start now loads ${projectNames(canonical.selected)}.`, 'success');
+    addLog(`Selected projects: ${projectNames(canonical.selected)}.`, 'success');
     setIsVersionModalOpen(false);
   };
 
@@ -347,9 +370,11 @@ function App() {
         addLog(assets, 'info');
 
         onProgress?.(15, 'Resolving the native loader…');
-        const resolvedPath = await invoke<string>('resolve_loader_dll', {
-          configuration: payloads,
-        });
+        const resolvedPath =
+          options?.dllPath?.trim() ||
+          (await invoke<string>('resolve_loader_dll', {
+            configuration: payloads,
+          }));
         setDllPath(resolvedPath);
 
         if (pids.length > 0) {
@@ -390,7 +415,12 @@ function App() {
     }
   };
 
-  const handleWatcherToggle = async (enabled: boolean, propagateError = false) => {
+  const handleWatcherToggle = async (
+    enabled: boolean,
+    propagateError = false,
+    manualDll?: string
+  ) => {
+    if (enabled && watcherActive) return;
     if (!isTauriRuntime()) {
       addLog('Process watcher requires the desktop runtime.', 'warning');
       if (propagateError) throw new Error('Process watcher requires the desktop runtime.');
@@ -402,11 +432,12 @@ function App() {
       return;
     }
     try {
+      if (enabled) setWatcherStatus(null);
       if (enabled && payloads.selected.includes('fdplunar')) {
         await invoke<string>('ensure_payload_assets', { configuration: payloads });
       }
       const watcherDll = enabled
-        ? await invoke<string>('resolve_loader_dll', { configuration: payloads })
+        ? manualDll || (await invoke<string>('resolve_loader_dll', { configuration: payloads }))
         : dllPath;
       const result = enabled
         ? await invoke<string>('start_watcher', {
@@ -421,9 +452,15 @@ function App() {
           })
         : await invoke<string>('stop_watcher');
       setWatcherActive(enabled);
+      setWatcherStatus((current) =>
+        enabled
+          ? (current ?? { state: 'waiting', message: result })
+          : { state: 'stopped', message: result }
+      );
       addLog(result, enabled ? 'success' : 'warning');
     } catch (error) {
       setWatcherActive(false);
+      setWatcherStatus({ state: 'error', message: String(error) });
       addLog(`Watcher failed: ${String(error)}`, 'error');
       if (propagateError) throw error;
     }
@@ -529,11 +566,18 @@ function App() {
             version={`v${appVersion}`}
             client={fdpWrapper}
             selectedProjects={projectNames(payloads.selected)}
+            fdpInject={payloads.selected.includes('fdplunar')}
             launchState={launchState}
             assetState={assetState}
             started={isInjectionModalOpen}
             statusMessage={
-              launchState === 'idle' ? (assetState === 'idle' ? '' : assetDetail) : latestMessage
+              watcherActive && watcherStatus
+                ? watcherStatus.message
+                : launchState === 'idle'
+                  ? assetState === 'idle'
+                    ? ''
+                    : assetDetail
+                  : latestMessage
             }
             onLaunch={() => setIsInjectionModalOpen(true)}
             onSelectClient={() => setIsClientModalOpen(true)}
@@ -566,8 +610,11 @@ function App() {
         setDllPath={setDllPath}
         fdpMode={fdpMode}
         setFdpMode={setFdpMode}
-        lunarStartup={payloads.selected.includes('fdplunar')}
-        onStartLunar={() => handleWatcherToggle(true, true)}
+        fdpInject={payloads.selected.includes('fdplunar')}
+        watcherActive={watcherActive}
+        watcherStatus={watcherStatus}
+        onStartLunar={(manualDll) => handleWatcherToggle(true, true, manualDll)}
+        onStopLunar={() => handleWatcherToggle(false, true)}
       />
       <ClientSelectionModal
         isOpen={isClientModalOpen}

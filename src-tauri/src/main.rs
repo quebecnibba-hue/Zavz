@@ -11,6 +11,7 @@ mod thread_hijack;
 use std::{fs, path::PathBuf, sync::Mutex, time::Duration};
 
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use sysinfo::{ProcessRefreshKind, System};
 use tauri::{generate_context, AppHandle, Emitter, Manager, State};
 use tauri_plugin_opener::OpenerExt;
@@ -128,6 +129,18 @@ struct WatcherHandle {
     stop: oneshot::Sender<()>,
 }
 
+#[derive(Debug, Clone, Serialize)]
+struct WatcherStatus {
+    state: &'static str,
+    message: String,
+}
+
+fn emit_watcher_status(app: &AppHandle, state: &'static str, message: impl Into<String>) {
+    let message = message.into();
+    let _ = app.emit("watcher-status", &message);
+    let _ = app.emit("watcher-state", WatcherStatus { state, message });
+}
+
 #[derive(Default)]
 struct WatcherState {
     handle: Mutex<Option<WatcherHandle>>,
@@ -142,6 +155,11 @@ fn settings_path(_app: &AppHandle) -> Result<PathBuf, String> {
 
 fn materialize_loader_dll(_app: &AppHandle) -> Result<PathBuf, String> {
     materialize_dll("native.dll", EMBEDDED_LOADER_DLL)
+}
+
+fn materialize_lunar_dll() -> Result<PathBuf, String> {
+    let hash = Sha256::digest(EMBEDDED_LUNAR_DLL);
+    materialize_dll(&format!("fdp-lunar-{:x}.dll", hash), EMBEDDED_LUNAR_DLL)
 }
 
 fn materialize_dll(name: &str, bytes: &[u8]) -> Result<PathBuf, String> {
@@ -321,9 +339,19 @@ fn save_settings(app: AppHandle, settings: InjectorSettings) -> Result<String, S
 
 #[tauri::command]
 async fn inject_dll(app: AppHandle, request: InjectRequest) -> Result<String, String> {
-    tauri::async_runtime::spawn_blocking(move || inject_selected(&app, request))
-        .await
-        .map_err(|e| e.to_string())?
+    tauri::async_runtime::spawn_blocking(move || {
+        if let Some(configuration) = request
+            .payloads
+            .as_ref()
+            .filter(|p| p.selected.contains(&PayloadId::Fdplunar))
+        {
+            let selected = payloads::resolve_selected(configuration)?;
+            payloads::require_runtime_bundle(&selected[0].1)?;
+        }
+        inject_selected(&app, request)
+    })
+    .await
+    .map_err(|e| e.to_string())?
 }
 
 fn inject_selected(app: &AppHandle, request: InjectRequest) -> Result<String, String> {
@@ -335,7 +363,7 @@ fn inject_selected(app: &AppHandle, request: InjectRequest) -> Result<String, St
         configuration.validate()?;
     }
     if early_lunar && !matches!(request.method, InjectionMethod::Standard) {
-        return Err("FDPClient Inject uses the Standard DLL loader during game startup.".into());
+        return Err("FDPClient Inject uses the Standard DLL loader.".into());
     }
     emit_injection_progress(app, 5, "Checking the selected game process…");
     // Validate target process name
@@ -446,7 +474,7 @@ fn inject_selected(app: &AppHandle, request: InjectRequest) -> Result<String, St
                     app,
                     76,
                     if early_lunar {
-                        "Waiting for Lunar and FDP to initialize (up to five minutes)…"
+                        "Waiting for FDPClient Inject to finish loading (up to five minutes)…"
                     } else {
                         "Waiting for Minecraft to confirm the payload (up to 30 seconds)…"
                     },
@@ -549,32 +577,72 @@ fn start_watcher(
     let (stop_tx, mut stop_rx) = oneshot::channel();
     let early_lunar = request.payloads.selected.contains(&PayloadId::Fdplunar);
     request.payloads.validate()?;
-    let target = if early_lunar {
-        "lunar-startup".to_string()
+    if early_lunar {
+        if !matches!(request.method, InjectionMethod::Standard) {
+            return Err(
+                "FDPClient Inject uses the Standard DLL loader during game startup.".into(),
+            );
+        }
+        prepare_selected_payloads(&app, &request.payloads)?;
+    }
+    // Existing JVMs are never startup targets, even if their window disappears.
+    let mut excluded = if early_lunar {
+        injector::existing_lunar_processes()
     } else {
-        request.target
+        Default::default()
     };
+    let message = if early_lunar {
+        if excluded.is_empty() {
+            "Waiting for Lunar startup. Launch Lunar Client 1.8.9 from its official launcher."
+        } else {
+            "Lunar is already running. Close the game and launch it again from the official launcher; ZAVZ is watching for the next startup."
+        }
+        .to_string()
+    } else {
+        format!("Waiting for {}...", request.target)
+    };
+    emit_watcher_status(&app, "waiting", &message);
+    let target = request.target;
     let method = request.method;
     let payload_configuration = request.payloads;
     let app_handle = app.clone();
 
     tauri::async_runtime::spawn(async move {
         let mut last_pid: Option<u32> = None;
-        let mut waiting_reported = false;
+        let mut waiting_reported = true;
 
         loop {
             if stop_rx.try_recv().is_ok() {
-                let _ = app_handle.emit("watcher-status", "Watcher stopped.");
                 break;
             }
 
-            match injector::resolve_injection_target(&target) {
-                Ok((proc, info)) => {
-                    waiting_reported = false;
+            let next = if early_lunar {
+                injector::resolve_next_lunar_startup(&excluded)
+                    .map(|(process, info, identity)| (process, info, Some(identity)))
+            } else {
+                injector::resolve_injection_target(&target)
+                    .map(|(process, info)| (process, info, None))
+            };
+            match next {
+                Ok((proc, info, identity)) => {
+                    if !early_lunar {
+                        waiting_reported = false;
+                    }
                     if last_pid != Some(info.pid) {
                         drop(proc);
                         last_pid = Some(info.pid);
-                        let _ = app_handle.emit("watcher-status", "Process found. Injecting...");
+                        if let Some(identity) = identity {
+                            excluded.insert(identity);
+                        }
+                        emit_watcher_status(
+                            &app_handle,
+                            "loading",
+                            if early_lunar {
+                                "New Lunar startup detected. Waiting for FDPClient Inject to initialize..."
+                            } else {
+                                "Process found. Injecting..."
+                            },
+                        );
                         let app_for_inject = app_handle.clone();
                         let request = InjectRequest {
                             target: info.pid.to_string(),
@@ -586,10 +654,14 @@ fn start_watcher(
                             inject_selected(&app_for_inject, request)
                         })
                         .await;
+                        if stop_rx.try_recv().is_ok() {
+                            break;
+                        }
                         match outcome.unwrap_or_else(|error| Err(error.to_string())) {
                             Ok(_) => {
-                                let _ = app_handle.emit(
-                                    "watcher-status",
+                                emit_watcher_status(
+                                    &app_handle,
+                                    "success",
                                     format!(
                                         "Selected payloads initialized in {} [{}] pid={}!",
                                         info.name, info.kind, info.pid
@@ -598,16 +670,22 @@ fn start_watcher(
                                 last_pid = Some(info.pid);
                             }
                             Err(err) => {
-                                let _ =
-                                    app_handle.emit("watcher-status", format!("Error: {}", err));
+                                emit_watcher_status(
+                                    &app_handle,
+                                    "error",
+                                    format!("Error: {}", err),
+                                );
                             }
                         }
                     }
                 }
                 Err(_) => {
                     if !early_lunar || !waiting_reported {
-                        let _ =
-                            app_handle.emit("watcher-status", format!("Waiting for {}...", target));
+                        emit_watcher_status(
+                            &app_handle,
+                            "waiting",
+                            format!("Waiting for {}...", target),
+                        );
                     }
                     waiting_reported = true;
                     last_pid = None;
@@ -625,11 +703,11 @@ fn start_watcher(
 
     *guard = Some(WatcherHandle { stop: stop_tx });
 
-    Ok("Watcher started.".to_string())
+    Ok(message)
 }
 
 #[tauri::command]
-fn stop_watcher(state: State<'_, WatcherState>) -> Result<String, String> {
+fn stop_watcher(app: AppHandle, state: State<'_, WatcherState>) -> Result<String, String> {
     let mut guard = state
         .handle
         .lock()
@@ -637,6 +715,7 @@ fn stop_watcher(state: State<'_, WatcherState>) -> Result<String, String> {
 
     if let Some(handle) = guard.take() {
         let _ = handle.stop.send(());
+        emit_watcher_status(&app, "stopped", "Watcher stopped.");
         return Ok("Watcher stopped.".to_string());
     }
 
@@ -701,7 +780,7 @@ fn resolve_loader_dll(
         .as_ref()
         .is_some_and(|p| p.selected.contains(&PayloadId::Fdplunar));
     let dll = if lunar {
-        materialize_dll("fdp-lunar.dll", EMBEDDED_LUNAR_DLL)?
+        materialize_lunar_dll()?
     } else {
         materialize_loader_dll(&app)?
     };
@@ -735,7 +814,7 @@ fn ensure_payload_assets(
 ) -> Result<String, String> {
     let installed = prepare_selected_payloads(&app, &configuration)?;
     if configuration.selected.contains(&PayloadId::Fdplunar) {
-        materialize_dll("fdp-lunar.dll", EMBEDDED_LUNAR_DLL)?;
+        materialize_lunar_dll()?;
     } else {
         materialize_loader_dll(&app)?;
     }

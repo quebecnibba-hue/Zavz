@@ -18,6 +18,7 @@ export type CompactAssetState = 'idle' | 'preparing' | 'ready' | 'error';
 
 interface LaunchCardProps {
   selectedProjects: string;
+  fdpInject?: boolean;
   version: string;
   client: FdpWrapper;
   launchState: LaunchState;
@@ -61,6 +62,7 @@ const RELEASE_CHANGELOG = [
 
 export function LaunchCard({
   selectedProjects,
+  fdpInject = false,
   version,
   client,
   launchState,
@@ -185,7 +187,7 @@ export function LaunchCard({
         }
         onClick={onLaunch}
       >
-        Start
+        {fdpInject ? 'Inject' : 'Start'}
       </Button>
     </aside>
   );

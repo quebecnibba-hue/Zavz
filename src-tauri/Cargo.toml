@@ -10,6 +10,7 @@ edition = "2021"
 [dependencies]
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
+sha2 = "0.10"
 zip = { version = "=9.2.1", default-features = false, features = ["deflate-flate2-zlib-rs"] }
 sysinfo = "0.30"
 dll-syringe = { version = "0.17", default-features = false, features = ["syringe"] }

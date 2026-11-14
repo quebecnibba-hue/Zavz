@@ -17,6 +17,7 @@ export type InjectMode = 'manual' | 'detect';
 export interface InjectOptions {
   target?: string;
   pids?: number[];
+  dllPath?: string;
 }
 
 export type InjectionMethod = 'standard' | 'manual_map' | 'thread_hijack' | 'reflective';
@@ -42,6 +43,11 @@ export interface WatcherRequest {
   target: string;
   dllPath: string;
   method: InjectionMethod;
+}
+
+export interface WatcherStatus {
+  state: 'waiting' | 'loading' | 'success' | 'error' | 'stopped';
+  message: string;
 }
 
 export type PayloadId = 'visuals' | 'fdpclient' | 'fdplunar';

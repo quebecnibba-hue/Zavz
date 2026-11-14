@@ -5535,6 +5535,7 @@ dependencies = [
  "rfd",
  "serde",
  "serde_json",
+ "sha2",
  "sysinfo 0.30.13",
  "tauri",
  "tauri-build",

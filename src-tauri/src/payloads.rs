@@ -122,7 +122,7 @@ pub fn validate_jar(source: &Path, id: PayloadId) -> Result<(), String> {
         {
             Ok(())
         } else {
-            Err("Choose the current fdpclient-inject.jar bundle for native Lunar startup.".into())
+            Err("Choose the current FDPClient Inject bundle for Lunar Client.".into())
         };
     }
     if id
@@ -136,6 +136,22 @@ pub fn validate_jar(source: &Path, id: PayloadId) -> Result<(), String> {
         Some(name) if archive.index_for_name(&name).is_some() => Ok(()),
         _ => Err(wrong()),
     }
+}
+
+pub fn require_runtime_bundle(source: &Path) -> Result<(), String> {
+    validate_jar(source, PayloadId::Fdplunar)?;
+    let file = fs::File::open(source).map_err(|error| error.to_string())?;
+    let mut archive = zip::ZipArchive::new(file).map_err(|error| error.to_string())?;
+    for key in [
+        "FDP-Lunar-Runtime-Attach",
+        "Can-Redefine-Classes",
+        "Can-Retransform-Classes",
+    ] {
+        if manifest_value(&mut archive, key).as_deref() != Some("true") {
+            return Err("This FDPClient Inject build supports startup loading only. Select the current runtime-compatible FDPClient Inject JAR to inject into an open Lunar game.".into());
+        }
+    }
+    Ok(())
 }
 
 pub fn identify_jar(source: &Path) -> Result<PayloadId, String> {
@@ -258,7 +274,9 @@ impl PayloadConfiguration {
             return Err("Select a project to load.".into());
         }
         if self.selected.contains(&PayloadId::Fdplunar) && self.selected.len() != 1 {
-            return Err("FDPClient Inject uses its own startup DLL. Select it on its own.".into());
+            return Err(
+                "FDPClient Inject uses its own native loader. Select it on its own.".into(),
+            );
         }
         if self.selected.len() > 2 || (self.selected.len() > 1 && !self.allow_multiple) {
             return Err("Turn on \"Load both\" before selecting both projects.".into());
@@ -769,6 +787,28 @@ mod tests {
         assert_eq!(identify_jar(&path).unwrap(), PayloadId::Fdplunar);
         assert!(validate_jar(&path, PayloadId::Fdplunar).is_ok());
         assert!(validate_jar(&path, PayloadId::Visuals).is_err());
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn startup_only_bundles_remain_selectable_but_cannot_be_used_for_runtime_attachment() {
+        let path = native_jar("old startup bundle");
+        assert_eq!(identify_jar(&path).unwrap(), PayloadId::Fdplunar);
+        assert!(require_runtime_bundle(&path)
+            .unwrap_err()
+            .contains("supports startup loading only"));
+        let _ = fs::remove_file(path);
+    }
+
+    #[test]
+    fn runtime_capability_is_read_from_a_renamed_compressed_manifest() {
+        let path = jar("arbitrary runtime name", &[
+            ("META-INF/MANIFEST.MF", "Manifest-Version: 1.0\r\nAgent-Class: net.ccbluex.liquidbounce.injection.bootstrap.LunarAgent\r\nFDP-Lunar-Bundle: 1.8.9\r\nFDP-Payload-Resource: FDPClient.jar\r\nFDP-Lunar-Runtime-Attach: true\r\nCan-Redefine-Classes: true\r\nCan-Retransform-Classes: true\r\n\r\n"),
+            ("net/ccbluex/liquidbounce/injection/bootstrap/LunarAgent.class", ""),
+            ("FDPClient.jar", "fixture payload"),
+        ]);
+        assert!(require_runtime_bundle(&path).is_ok());
+        assert_eq!(identify_jar(&path).unwrap(), PayloadId::Fdplunar);
         let _ = fs::remove_file(path);
     }
 

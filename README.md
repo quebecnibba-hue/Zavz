@@ -27,7 +27,7 @@ Antivirus tools can flag injectors, including ZAVZ, because malware uses similar
 - **One executable:** the native loaders are embedded in `ZAVZ.exe`, built with Tauri 2, React and Rust.
 
 ## CheatBreaker 1.7.10 investigation
-See [the diagnostic plan](docs/CHEATBREAKER-1.7.10-DIAGNOSTIC.md) for verified compatibility facts, read-only process-detection scope, and limitations. This is not an injector or a verified 1.7.10 payload.
+See [the diagnostic plan](docs/CHEATBREAKER-1.7.10-DIAGNOSTIC.md) for verified compatibility facts, read-only process-detection scope, and limitations. A basic Windows inventory script is available at [Get-CheatBreakerProcessInfo.ps1](tools/diagnostics/Get-CheatBreakerProcessInfo.ps1). This is not an injector or a verified 1.7.10 payload.
 
 ## The staff team
 Click [here](docs/TEAM.md) to learn about the ZAVZ team.

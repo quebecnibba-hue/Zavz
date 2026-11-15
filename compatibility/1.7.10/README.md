@@ -1,0 +1,29 @@
+# Minecraft 1.7.10 compatibility baseline
+
+This directory is a standalone Java 8 diagnostic scaffold for the Minecraft 1.7.10 target.
+
+## Target metadata
+
+- Minecraft: `1.7.10`
+- Forge baseline: `10.13.4.1614`
+- Java source/target: `1.8`
+
+## What is implemented
+
+- An exact-version predicate that accepts only `1.7.10`.
+- Unit tests proving that 1.8.9, 1.7.2, null, and whitespace-padded values are handled explicitly.
+- A standalone Gradle Java build, isolated from the existing Tauri application.
+
+## What is not implemented
+
+This is **not** an FDPClient port, a CheatBreaker integration, or a game-process loader. It contains no injection, memory manipulation, anti-cheat bypass, or gameplay automation. The existing 1.8.9 client code cannot be declared compatible merely by changing a version string.
+
+## Run the checks
+
+From this directory, with a Java 8-compatible Gradle installation:
+
+```sh
+gradle test
+```
+
+A real 1.7.10 application port would require a separately maintained 1.7.10 source set, APIs and mappings for that version, dependency resolution, and tests against a legitimate 1.7.10 development/runtime environment. None of those compatibility claims are made by this scaffold.

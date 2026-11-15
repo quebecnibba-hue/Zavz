@@ -138,3 +138,11 @@ A further read-only review of `src-tauri/src/injector.rs` confirms that client i
 - The user-facing “not found” errors for CheatBreaker, Badlion, CMCLIENT, Vanilla, and Forge explicitly instruct the user to open a 1.8.9 game.
 
 This means the current detector can recognize a process as “CheatBreaker” based on its title, but it cannot distinguish CheatBreaker 1.7.10 from 1.8.9. The `1.8` scoring hint is not a reliable version check and should not be interpreted as one. No process-detection or runtime-loading behavior was changed during this audit.
+
+### Build-pipeline scope (15 November 2026)
+
+The main Windows workflow `.github/workflows/build.yml` builds the existing `native/fdp-lunar` CMake component, copies its output to `src/load/fdp-lunar.dll`, builds the frontend, runs Rust tests, and packages the Tauri application. It does not configure a Minecraft 1.7.10 ForgeGradle workspace, compile FDPClient Java/Kotlin sources, or launch a Minecraft integration test.
+
+The separate `.github/workflows/compatibility-1.7.10.yml` workflow is the only workflow dedicated to the diagnostic Java scaffold. Its passing result, if observed, would validate only the metadata parser and its unit tests. It would not validate the native loader, FDPClient payload, CheatBreaker, Aim Assist, or Minecraft runtime compatibility.
+
+Accordingly, the existence of a successful ZAVZ application build must not be presented as evidence that the 1.7.10 port works.

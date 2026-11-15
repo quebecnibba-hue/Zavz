@@ -38,7 +38,7 @@ Consequently, changing the displayed CheatBreaker label or accepting another JAR
 
 ## Java/Kotlin source review (15 November 2026)
 
-The ZAVZ repository itself contains **no Java or Kotlin source files** and does not track its payload JARs. The `.gitignore` explicitly excludes `src/load/fdpclient-inject.jar`, `src/load/fdp-lunar.jar`, and other built JARs. Therefore the exact Java bytecode selected by a ZAVZ user cannot be inspected from this repository checkout.
+The ZAVZ repository does not contain the FDPClient Java/Kotlin gameplay source or track its payload JARs. It now contains a small, separate Java 8 diagnostic scaffold under `compatibility/1.7.10/`; that scaffold only parses launcher version metadata and tests exact version classification. It is not the FDPClient client source and does not implement game features. The `.gitignore` explicitly excludes `src/load/fdpclient-inject.jar`, `src/load/fdp-lunar.jar`, and other built JARs. Therefore the exact Java bytecode selected by a ZAVZ user cannot be inspected from this repository checkout.
 
 The ZAVZ documentation points to a sibling FDPClient source checkout. The public source repository identified by FDPClient's own `CLIENT_GITHUB` metadata is [SkidderMC/FDPClient](https://github.com/SkidderMC/FDPClient). I inspected its current public source metadata and build configuration as a reference; this does **not** prove that it is byte-for-byte the same revision as any local JAR used with ZAVZ.
 
@@ -118,3 +118,7 @@ Final verification of the three-state change: the test source now contains expli
 ### Additional metadata edge cases (15 November 2026)
 
 VersionMetadataTest now also asserts that null, boolean, and whitespace-only top-level id values classify as UNKNOWN. These cases are intentionally not treated as either a supported or a known unsupported Minecraft version. The test source was re-fetched from the main branch after commit e59e04b to confirm the assertions are present; execution remains unverified.
+
+### Clarification to the source inventory (15 November 2026)
+
+The phrase “no Java or Kotlin source files” above refers specifically to the FDPClient payload/gameplay implementation. The repository does contain Java files in `compatibility/1.7.10/`, added for passive version-metadata diagnostics. Those files do not contain Minecraft/Forge APIs, Mixin hooks, or client gameplay code. This distinction keeps the source inventory accurate without overstating the scaffold's scope.

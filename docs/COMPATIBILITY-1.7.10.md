@@ -102,3 +102,15 @@ The standalone diagnostic module now uses Gson to parse launcher metadata as JSO
 The diagnostic Gradle module declares Gson 2.10.1 and JUnit 4.13.2. Its Forge version constant remains documentary metadata: this project does **not** resolve ForgeGradle, Minecraft 1.7.10, mappings, or CheatBreaker APIs and does not compile a game mod. This separation is intentional; it prevents a version detector from being mistaken for a working game port.
 
 The latest documentation/test changes were committed to `main`. The connected GitHub status endpoint still reports no commit statuses for the latest commit, so the hosted test result remains unverified. A successful metadata-parser test run would validate only this small diagnostic module, not FDPClient or CheatBreaker compatibility.
+
+### Three-state version classification (15 November 2026)
+
+The diagnostic parser now exposes an explicit VersionCompatibility result:
+
+- SUPPORTED: a valid top-level metadata id equals 1.7.10.
+- UNSUPPORTED: a valid top-level metadata id exists but names another version, such as 1.8.9.
+- UNKNOWN: metadata is absent, malformed, or does not contain a top-level string id.
+
+This avoids conflating missing evidence with a confirmed different Minecraft version. The boolean targetsMinecraft1710 helper remains available and returns true only for SUPPORTED. Tests were added for all three states. Latest commits: e538b1e (enum), dc84440 (classifier), 84a4581 (tests), and 4022ff2 (module documentation).
+
+The connected GitHub endpoints currently return no commit statuses and no pull-request workflow runs for the latest commit. This does not prove that a push-triggered workflow has failed; it means its result is not visible through these endpoints. The code has not been executed in a local or hosted Gradle environment in this session, so test success remains unverified.

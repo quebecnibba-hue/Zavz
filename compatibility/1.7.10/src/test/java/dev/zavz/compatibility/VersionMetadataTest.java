@@ -56,4 +56,14 @@ public class VersionMetadataTest {
         assertEquals(VersionCompatibility.UNKNOWN,
                 VersionMetadata.classifyMinecraftVersion("not-json"));
     }
+
+    @Test
+    public void treatsNullBooleanAndBlankIdsAsUnknown() {
+        assertEquals(VersionCompatibility.UNKNOWN,
+                VersionMetadata.classifyMinecraftVersion("{\"id\":null}"));
+        assertEquals(VersionCompatibility.UNKNOWN,
+                VersionMetadata.classifyMinecraftVersion("{\"id\":true}"));
+        assertEquals(VersionCompatibility.UNKNOWN,
+                VersionMetadata.classifyMinecraftVersion("{\"id\":\"   \"}"));
+    }
 }

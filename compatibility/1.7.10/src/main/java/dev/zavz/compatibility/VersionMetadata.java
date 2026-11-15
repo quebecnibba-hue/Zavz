@@ -1,34 +1,39 @@
 package dev.zavz.compatibility;
 
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParseException;
+import com.google.gson.JsonParser;
+
 /** Passive parser for the top-level id field in a Minecraft version JSON file. */
 public final class VersionMetadata {
-    private static final String ID_KEY = "\"id\"";
-
     private VersionMetadata() {
     }
 
-    /** Extracts the first id value from launcher metadata text. */
+    /**
+     * Reads only the top-level string property named "id".
+     * Invalid JSON, missing properties, and non-string values return an empty string.
+     */
     public static String readVersionId(String json) {
         if (json == null || json.trim().isEmpty()) {
             return "";
         }
-        int keyIndex = json.indexOf(ID_KEY);
-        if (keyIndex < 0) {
+
+        try {
+            JsonElement root = JsonParser.parseString(json);
+            if (!root.isJsonObject()) {
+                return "";
+            }
+
+            JsonObject object = root.getAsJsonObject();
+            JsonElement id = object.get("id");
+            if (id == null || !id.isJsonPrimitive() || !id.getAsJsonPrimitive().isString()) {
+                return "";
+            }
+            return id.getAsString().trim();
+        } catch (JsonParseException | IllegalStateException exception) {
             return "";
         }
-        int colonIndex = json.indexOf(':', keyIndex + ID_KEY.length());
-        if (colonIndex < 0) {
-            return "";
-        }
-        int openingQuote = json.indexOf('\"', colonIndex + 1);
-        if (openingQuote < 0) {
-            return "";
-        }
-        int closingQuote = json.indexOf('\"', openingQuote + 1);
-        if (closingQuote < 0) {
-            return "";
-        }
-        return json.substring(openingQuote + 1, closingQuote).trim();
     }
 
     /** True only when the metadata declares exactly Minecraft 1.7.10. */

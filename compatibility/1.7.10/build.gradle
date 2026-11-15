@@ -1,0 +1,21 @@
+plugins {
+    id 'java'
+}
+
+group = 'dev.zavz.compatibility'
+version = '0.1.0'
+
+sourceCompatibility = JavaVersion.VERSION_1_8
+targetCompatibility = JavaVersion.VERSION_1_8
+
+repositories {
+    mavenCentral()
+}
+
+test {
+    useJUnit()
+}
+
+dependencies {
+    testImplementation 'junit:junit:4.13.2'
+}

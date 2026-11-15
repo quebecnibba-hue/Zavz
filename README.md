@@ -1,6 +1,6 @@
 <div align="center">
 <img src="docs/assets/zavz-banner.svg" alt="ZAVZ Injector" width="100%">
-<h3>A desktop app that loads a chosen Java project into a running Minecraft 1.8.9 process.</h3>
+<h3>A desktop app for Minecraft 1.8.9 client workflows.</h3>
 
 <a href="https://github.com/opZywl/Zavz/actions/workflows/build.yml?query=event%3Apush"><img src="https://img.shields.io/badge/build-beta-ff0aaf?style=flat-square&labelColor=0b0b0f" alt="Build"></a>
 <img src="https://img.shields.io/badge/platform-Windows-ff0aaf?style=flat-square&labelColor=0b0b0f" alt="Platform: Windows">
@@ -19,7 +19,8 @@ Click [here](docs/INSTALLING.md) for instructions on how to install ZAVZ.
 Antivirus tools can flag injectors, including ZAVZ, because malware uses similar techniques. The source code is in this repository if you want to check it.
 
 ## Features
-- **Automatic target detection** for Lunar Client, Badlion Client, CMCLIENT, CheatBreaker, Forge and Vanilla on Minecraft 1.8.9.
+- **Automatic client-process detection** for Lunar Client, Badlion Client, CMCLIENT, CheatBreaker, Forge and Vanilla. Detection identifies the client process; it does not independently verify the Minecraft version.
+- **Version support status:** this repository currently documents Minecraft 1.8.9. Minecraft 1.7.10 / CheatBreaker 1.7.10 compatibility is not implemented or verified by this fork.
 - **Four injection methods:** Standard (LoadLibrary), Manual Map, Thread Hijack and Reflective.
 - **Projects:** [Julia Visuals](https://lucas-lima.xyz/archives/julia-visuals), [FDPClient Inject](https://fdpinfo.github.io).
 - **Process watcher** that injects as soon as the selected client starts.

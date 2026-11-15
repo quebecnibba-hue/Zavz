@@ -93,3 +93,12 @@ This CI job validates only the diagnostic scaffold. It does not build or test an
 A follow-up GitHub commit/code search scoped to `SkidderMC/FDPClient` for the exact string `1.7.10` returned no matching commits or code-search results through the connected GitHub search interface. This is a limited search result, not proof that no private, deleted, or unindexed fork exists. Combined with the inspected b17 build configuration, there is still no verified upstream 1.7.10 build to use as a porting base.
 
 The diagnostic scaffold now also includes `VersionMetadata`, a passive reader for the launcher's version `id` field, with tests for 1.7.10 acceptance and rejection of 1.8.9 or missing metadata. The workflow commit has no reported commit status yet; its tests have therefore **not** been reported as passing. The workflow can also be started manually from the repository's GitHub Actions page using `workflow_dispatch`.
+
+
+### Strict metadata parser hardening (15 November 2026)
+
+The standalone diagnostic module now uses Gson to parse launcher metadata as JSON rather than searching for the first textual occurrence of the string `"id"`. It accepts only a top-level string property named `id`; nested properties, non-object JSON roots, non-string values, empty input, and malformed JSON produce an unknown/unsupported result. Unit tests cover these cases and whitespace around the version value.
+
+The diagnostic Gradle module declares Gson 2.10.1 and JUnit 4.13.2. Its Forge version constant remains documentary metadata: this project does **not** resolve ForgeGradle, Minecraft 1.7.10, mappings, or CheatBreaker APIs and does not compile a game mod. This separation is intentional; it prevents a version detector from being mistaken for a working game port.
+
+The latest documentation/test changes were committed to `main`. The connected GitHub status endpoint still reports no commit statuses for the latest commit, so the hosted test result remains unverified. A successful metadata-parser test run would validate only this small diagnostic module, not FDPClient or CheatBreaker compatibility.

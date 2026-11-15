@@ -5,6 +5,8 @@ import cpw.mods.fml.common.event.FMLInitializationEvent;
 import cpw.mods.fml.common.event.FMLPreInitializationEvent;
 import cpw.mods.fml.common.event.FMLPostInitializationEvent;
 import cpw.mods.fml.common.event.FMLServerStartingEvent;
+import dev.zavz.compat1710.feature.DiagnosticsFeature;
+import dev.zavz.compat1710.feature.FeatureRegistry;
 import org.apache.logging.log4j.Logger;
 
 /**
@@ -23,11 +25,18 @@ public final class CompatibilityMod {
     public static final String VERSION = "1.0.0";
 
     private static Logger logger;
+    private static final FeatureRegistry FEATURES = new FeatureRegistry();
+
+    public static FeatureRegistry getFeatures() {
+        return FEATURES;
+    }
 
     @Mod.EventHandler
     public void preInit(FMLPreInitializationEvent event) {
         logger = event.getModLog();
+        FEATURES.register(new DiagnosticsFeature());
         logger.info("{} pre-initializing for Minecraft 1.7.10", NAME);
+        logger.info("{} registered {} passive feature(s)", NAME, FEATURES.size());
     }
 
     @Mod.EventHandler

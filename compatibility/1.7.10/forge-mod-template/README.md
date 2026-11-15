@@ -27,15 +27,18 @@ The resulting mod JAR is written to `build/libs/`.
 1. Start a local Forge 1.7.10 client/server with this mod installed in the normal `mods` folder.
 2. Check the log for the mod initialization messages.
 3. In a world with commands enabled, run `/zavzcompat` to verify that the mod loaded.
-4. Run `/zavzcompat features` to list the registered passive features.
+4. Run `/zavzcompat features` to list registered passive features and their enabled states.
 
-## Feature architecture
+## Feature architecture and configuration
 
-- `feature/Feature.java` defines the small metadata interface for a feature.
+- `feature/Feature.java` defines the metadata interface for a feature.
 - `feature/FeatureRegistry.java` registers features, rejects blank/duplicate IDs, and returns an immutable snapshot.
+- `feature/FeatureRegistry.java` also loads and saves each feature's boolean enabled flag through Forge's `Configuration` API.
 - `feature/DiagnosticsFeature.java` is a passive example entry.
-- `CompatibilityMod.java` creates the registry and registers the example during pre-initialization.
+- `CompatibilityMod.java` creates the registry, loads `config/zavzcompat.cfg` during pre-initialization, and registers the example feature.
 - `CompatibilityCommand.java` exposes the registry through the local Forge server command.
+
+The configuration file is created automatically on first launch. Each registered feature gets a `features.<id>.enabled` boolean entry. Changes made to the file are loaded at the next game launch. The enabled flag is configuration state only; it does not make a feature perform an action unless a future, separately reviewed implementation explicitly consumes that state.
 
 New entries should be registered during pre-initialization. Keep feature implementations limited to functionality appropriate for a normal Forge mod; this foundation intentionally contains no game-process injection, memory manipulation, anti-cheat bypass, or gameplay automation.
 

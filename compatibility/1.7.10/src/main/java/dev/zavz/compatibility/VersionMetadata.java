@@ -36,8 +36,22 @@ public final class VersionMetadata {
         }
     }
 
+    /**
+     * Distinguishes an absent/unreadable version from a known unsupported version.
+     * This is metadata-only identification and does not inspect a running game process.
+     */
+    public static VersionCompatibility classifyMinecraftVersion(String json) {
+        String versionId = readVersionId(json);
+        if (versionId.isEmpty()) {
+            return VersionCompatibility.UNKNOWN;
+        }
+        return MinecraftTarget.isSupportedVersion(versionId)
+                ? VersionCompatibility.SUPPORTED
+                : VersionCompatibility.UNSUPPORTED;
+    }
+
     /** True only when the metadata declares exactly Minecraft 1.7.10. */
     public static boolean targetsMinecraft1710(String json) {
-        return MinecraftTarget.isSupportedVersion(readVersionId(json));
+        return classifyMinecraftVersion(json) == VersionCompatibility.SUPPORTED;
     }
 }

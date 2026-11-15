@@ -42,4 +42,18 @@ public class VersionMetadataTest {
         assertEquals("", VersionMetadata.readVersionId("\"1.7.10\""));
         assertFalse(VersionMetadata.targetsMinecraft1710("{\"id\":"));
     }
+
+    @Test
+    public void classifiesKnownSupportedUnsupportedAndUnknownVersions() {
+        assertEquals(VersionCompatibility.SUPPORTED,
+                VersionMetadata.classifyMinecraftVersion("{\"id\":\"1.7.10\"}"));
+        assertEquals(VersionCompatibility.UNSUPPORTED,
+                VersionMetadata.classifyMinecraftVersion("{\"id\":\"1.8.9\"}"));
+        assertEquals(VersionCompatibility.UNKNOWN,
+                VersionMetadata.classifyMinecraftVersion("{\"time\":\"now\"}"));
+        assertEquals(VersionCompatibility.UNKNOWN,
+                VersionMetadata.classifyMinecraftVersion("{\"id\":1710}"));
+        assertEquals(VersionCompatibility.UNKNOWN,
+                VersionMetadata.classifyMinecraftVersion("not-json"));
+    }
 }

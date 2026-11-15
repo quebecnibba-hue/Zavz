@@ -1,0 +1,16 @@
+[
+  {
+    "modid": "zavzcompat",
+    "name": "ZAVZ Compatibility Mod",
+    "description": "A minimal standalone Forge 1.7.10 development scaffold.",
+    "version": "${version}",
+    "mcversion": "${mcversion}",
+    "url": "",
+    "updateUrl": "",
+    "authorList": ["ZAVZ contributors"],
+    "credits": "",
+    "logoFile": "",
+    "screenshots": [],
+    "dependencies": []
+  }
+]

@@ -24,3 +24,14 @@ The repository inspection does not establish that the CheatBreaker 1.8.9 payload
 5. Run the build and tests against a clean 1.7.10 test installation before claiming support.
 
 This assessment intentionally does not change process injection, DLL loading, memory manipulation, anti-cheat evasion, or other runtime-loading mechanisms. No 1.7.10 compatibility claim should be made until the required artifacts and tests exist.
+
+## Additional source-code findings
+
+The current JAR checks are structural, not a general Minecraft-version detector:
+
+- The standard `Fdpclient` payload is accepted when the expected loader class and a recognized core class (or the declared payload class) exist in the archive. Those checks do not establish whether the bytecode targets Minecraft 1.7.10 or 1.8.9.
+- The dedicated `Fdplunar` bundle has a stricter manifest check that requires `FDP-Lunar-Bundle: 1.8.9`, the expected Lunar agent class, and an embedded `FDPClient.jar`.
+- The frontend process model currently exposes PID, process name, client kind, and window title. It has no verified Minecraft-version field.
+- The build workflow compiles the existing Lunar native component and runs the repository's current tests, but does not define a 1.7.10 test matrix.
+
+Consequently, changing the displayed CheatBreaker label or accepting another JAR filename would not be a compatibility port. The missing evidence is the actual 1.7.10 Java payload, its dependency/API target, and a reproducible test installation.

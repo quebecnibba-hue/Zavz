@@ -86,3 +86,10 @@ I also checked the `build.gradle` and `gradle.properties` at the exact `b17` tag
 A separate Java 8 diagnostic project now lives in [compatibility/1.7.10](../compatibility/1.7.10/). It records the Minecraft 1.7.10 target and Forge baseline 10.13.4.1614, performs exact version-string matching, and includes unit tests rejecting 1.8.9 and other non-target values. A dedicated GitHub Actions workflow at [compatibility-1.7.10.yml](../.github/workflows/compatibility-1.7.10.yml) runs these tests with Java 8 and Gradle 8.7 when the scaffold changes.
 
 This CI job validates only the diagnostic scaffold. It does not build or test an FDPClient payload, launch CheatBreaker, or establish compatibility of the existing runtime-loading components. The workflow has been committed but its first hosted run has not yet been observed.
+
+
+### Follow-up source search and CI status (15 November 2026)
+
+A follow-up GitHub commit/code search scoped to `SkidderMC/FDPClient` for the exact string `1.7.10` returned no matching commits or code-search results through the connected GitHub search interface. This is a limited search result, not proof that no private, deleted, or unindexed fork exists. Combined with the inspected b17 build configuration, there is still no verified upstream 1.7.10 build to use as a porting base.
+
+The diagnostic scaffold now also includes `VersionMetadata`, a passive reader for the launcher's version `id` field, with tests for 1.7.10 acceptance and rejection of 1.8.9 or missing metadata. The workflow commit has no reported commit status yet; its tests have therefore **not** been reported as passing. The workflow can also be started manually from the repository's GitHub Actions page using `workflow_dispatch`.

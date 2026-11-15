@@ -6,16 +6,13 @@ import java.util.regex.Pattern;
 /** Passive parser for the top-level id field in a Minecraft version JSON file. */
 public final class VersionMetadata {
     private static final Pattern ID_FIELD = Pattern.compile(
-        "\\\"id\\\"\\s*:\\s*\\\"([^\\\"]+)\\\""
+        "\\\"id\\\"\\s*:\\s*\\\"([^\\"]+)\\\""
     );
 
     private VersionMetadata() {
     }
 
-    /**
-     * Extracts the version id from launcher metadata text.
-     * Returns an empty string when metadata is absent or malformed.
-     */
+    /** Extracts the version id from launcher metadata text. */
     public static String readVersionId(String json) {
         if (json == null || json.trim().isEmpty()) {
             return "";

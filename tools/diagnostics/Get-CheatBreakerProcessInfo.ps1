@@ -14,8 +14,8 @@ try {
     exit 2
 }
 
-# Build a local PID lookup so parent process names can be reported without
-# querying command lines or opening process handles.
+# Build a local PID lookup so ancestry can be described from the same
+# read-only snapshot without querying command lines or opening process handles.
 $byPid = @{}
 foreach ($item in $processes) {
     $byPid[[int]$item.ProcessId] = $item
@@ -38,22 +38,36 @@ $results = @(
             continue
         }
 
-        $parentName = ''
         $parentId = [int]$process.ParentProcessId
+        $parentName = ''
         if ($byPid.ContainsKey($parentId)) {
             $parentName = [string]$byPid[$parentId].Name
+        }
+
+        $ancestorNames = @()
+        $visited = @{}
+        $cursor = $parentId
+        for ($depth = 0; $depth -lt 5 -and $cursor -gt 0; $depth++) {
+            if ($visited.ContainsKey($cursor) -or -not $byPid.ContainsKey($cursor)) {
+                break
+            }
+            $visited[$cursor] = $true
+            $ancestor = $byPid[$cursor]
+            $ancestorNames += [string]$ancestor.Name
+            $cursor = [int]$ancestor.ParentProcessId
         }
 
         $reason = if ($looksLikeCheatBreaker) {
             'Process name or window title contains CheatBreaker.'
         } else {
-            'Java process candidate; parent metadata is contextual only.'
+            'Java process candidate; process ancestry is contextual only.'
         }
 
         [pscustomobject]@{
             ProcessId       = [int]$process.ProcessId
             ParentProcessId = $parentId
             ParentName      = $parentName
+            AncestorNames   = ($ancestorNames -join ' <- ')
             Name            = $name
             WindowTitle     = $title
             ExecutablePath  = [string]$process.ExecutablePath

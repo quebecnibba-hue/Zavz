@@ -7,7 +7,9 @@ import cpw.mods.fml.common.event.FMLPostInitializationEvent;
 import cpw.mods.fml.common.event.FMLServerStartingEvent;
 import dev.zavz.compat1710.feature.DiagnosticsFeature;
 import dev.zavz.compat1710.feature.FeatureRegistry;
+import net.minecraftforge.common.config.Configuration;
 import org.apache.logging.log4j.Logger;
+import java.io.File;
 
 /**
  * Minimal, standalone Forge 1.7.10 mod entry point.
@@ -26,6 +28,7 @@ public final class CompatibilityMod {
 
     private static Logger logger;
     private static final FeatureRegistry FEATURES = new FeatureRegistry();
+    private static Configuration configuration;
 
     public static FeatureRegistry getFeatures() {
         return FEATURES;
@@ -35,6 +38,12 @@ public final class CompatibilityMod {
     public void preInit(FMLPreInitializationEvent event) {
         logger = event.getModLog();
         FEATURES.register(new DiagnosticsFeature());
+
+        File configFile = new File(event.getModConfigurationDirectory(), MOD_ID + ".cfg");
+        configuration = new Configuration(configFile);
+        configuration.load();
+        FEATURES.load(configuration);
+
         logger.info("{} pre-initializing for Minecraft 1.7.10", NAME);
         logger.info("{} registered {} passive feature(s)", NAME, FEATURES.size());
     }

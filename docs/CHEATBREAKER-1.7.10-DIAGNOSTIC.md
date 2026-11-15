@@ -20,6 +20,16 @@ This branch isolates investigation for CheatBreaker 1.7.10. It does not change t
 4. **Report limitations**: launcher/profile labels are not runtime attestation. The diagnostic must never report a confirmed runtime version based only on a window title or process name.
 5. **Stop before loading**: no DLL/JAR injection, remote-thread creation, manual mapping, reflective loading, memory patching, or anti-cheat/protection bypass is implemented here.
 
+## Read-only Windows inventory
+
+Run from PowerShell on Windows:
+
+```powershell
+powershell -NoProfile -ExecutionPolicy Bypass -File .\\tools\\diagnostics\\Get-CheatBreakerProcessInfo.ps1
+```
+
+The script lists Java processes and processes whose name or window title clearly contains CheatBreaker. It reports PID, parent PID, executable name, window title, and executable path when Windows makes that metadata available. It deliberately does not print the full command line because launch arguments can contain session tokens or other secrets. Every result is classified `UNKNOWN`: process metadata is not proof of the Minecraft version running inside the client. Access-denied or exited processes may have incomplete metadata. The script uses CIM/process metadata only and does not open process memory or load code into another process.
+
 ## Supported route
 
 CheatBreaker documents that custom mods are not supported. Use its built-in mod configuration or obtain an approved integration path from the CheatBreaker maintainers. For independent development, use a normal Forge 1.7.10 development client rather than attaching code to the protected CheatBreaker process.

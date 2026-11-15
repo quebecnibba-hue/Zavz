@@ -122,3 +122,8 @@ VersionMetadataTest now also asserts that null, boolean, and whitespace-only top
 ### Clarification to the source inventory (15 November 2026)
 
 The phrase “no Java or Kotlin source files” above refers specifically to the FDPClient payload/gameplay implementation. The repository does contain Java files in `compatibility/1.7.10/`, added for passive version-metadata diagnostics. Those files do not contain Minecraft/Forge APIs, Mixin hooks, or client gameplay code. This distinction keeps the source inventory accurate without overstating the scaffold's scope.
+
+
+### Metadata identity limitation (15 November 2026)
+
+The diagnostic parser reads the top-level `id` from a supplied launcher version JSON and compares it literally with `1.7.10`. That field identifies a launcher version/profile entry; custom profiles can use IDs that do not equal the underlying Minecraft version. Therefore the parser's three states describe the supplied metadata string only: `SUPPORTED` is an exact ID match, `UNSUPPORTED` is a different non-empty ID, and `UNKNOWN` is absent or invalid metadata. None of these states independently attests to the Minecraft version of a running process. A reliable runtime claim would require a trusted source of the actual game version (for example, an explicit version argument or validated game metadata tied to the launched instance) and integration tests against that launch path.

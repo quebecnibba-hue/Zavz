@@ -146,3 +146,14 @@ The main Windows workflow `.github/workflows/build.yml` builds the existing `nat
 The separate `.github/workflows/compatibility-1.7.10.yml` workflow is the only workflow dedicated to the diagnostic Java scaffold. Its passing result, if observed, would validate only the metadata parser and its unit tests. It would not validate the native loader, FDPClient payload, CheatBreaker, Aim Assist, or Minecraft runtime compatibility.
 
 Accordingly, the existence of a successful ZAVZ application build must not be presented as evidence that the 1.7.10 port works.
+
+### Upstream branch cross-check (15 November 2026)
+
+The public FDPClient repository currently exposes the following branches through the connected GitHub branch search: `main`, `Backup-Revert`, `icon`, and several dependency-update branches. I inspected the Gradle configuration on both `main` and `Backup-Revert`:
+
+- `main` declares Forge/Minecraft `1.8.9-11.15.1.2318-1.8.9` and mappings `stable_22`.
+- `Backup-Revert` also declares Forge/Minecraft `1.8.9-11.15.1.2318-1.8.9` and mappings `stable_22`.
+- The `Backup-Revert` branch uses an older Kotlin toolchain, but it is still an 1.8.9 workspace, not a 1.7.10 variant.
+- The connected source search for the exact `1.7.10` string returned no results in the upstream repository.
+
+This cross-check does not cover private branches, deleted refs, unindexed code, or unrelated forks. Within the public branches examined, however, there is no 1.7.10 build configuration to reuse. The port still lacks a verified 1.7.10 Java/Kotlin source tree and an integration test target.

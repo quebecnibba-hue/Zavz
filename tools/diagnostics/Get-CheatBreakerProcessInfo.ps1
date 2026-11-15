@@ -78,9 +78,12 @@ $results = @(
     }
 )
 
-if ($results.Count -eq 0) {
-    Write-Output 'No Java or clearly named CheatBreaker process was found.'
-    exit 0
+$output = [pscustomobject]@{
+    SchemaVersion = 1
+    CandidateCount = $results.Count
+    Candidates = @($results | Sort-Object ProcessId)
 }
 
-$results | Sort-Object ProcessId | ConvertTo-Json -Depth 3
+# Stable top-level JSON shape: consumers always receive an object containing
+# a Candidates array, including when no matching process exists.
+$output | ConvertTo-Json -Depth 4

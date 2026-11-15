@@ -7,11 +7,13 @@ This is a minimal mod project for a **normal, user-controlled Forge 1.7.10 devel
 - Minecraft 1.7.10
 - Forge 10.13.4.1614
 - Java 8
-- ForgeGradle 1.2 (legacy; its old Gradle/repository requirements may need maintenance)
+- Legacy ForgeGradle 1.2; its old Gradle and repository requirements may need maintenance.
 
 ## Build
 
-Use a compatible Gradle 2.x/4.x installation with Java 8, then run:
+Use Java 8 and a Gradle version compatible with ForgeGradle 1.2. This legacy plugin is not compatible with modern Gradle releases; if the build fails during plugin configuration, use the Gradle version specified by the matching Forge 1.7.10 MDK rather than upgrading the project to the latest Gradle.
+
+Run:
 
 ```sh
 gradle setupDecompWorkspace
@@ -20,9 +22,16 @@ gradle build
 
 The resulting mod JAR is written to `build/libs/`.
 
-## Entry point
+## Verify in a local Forge world
 
-`src/main/java/dev/zavz/compat1710/CompatibilityMod.java` contains the `@Mod` entry point and the standard pre-init/init/post-init lifecycle handlers.
+1. Start a local Forge 1.7.10 client/server with this mod installed in the normal `mods` folder.
+2. Check the log for the mod initialization messages.
+3. In a world with commands enabled, run `/zavzcompat`. The command replies with the mod name, version, and target game version.
+
+## Entry points
+
+- `CompatibilityMod.java` contains the `@Mod` entry point and the standard pre-init/init/post-init lifecycle handlers.
+- `CompatibilityCommand.java` provides a harmless server-side command to confirm that Forge loaded the mod.
 
 ## Scope
 

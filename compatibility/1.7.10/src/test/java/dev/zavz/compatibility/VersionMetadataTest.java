@@ -13,6 +13,12 @@ public class VersionMetadataTest {
     }
 
     @Test
+    public void trimsWhitespaceAroundVersionId() {
+        assertEquals("1.7.10", VersionMetadata.readVersionId("{\"id\":\" 1.7.10 \"}"));
+        assertTrue(VersionMetadata.targetsMinecraft1710("{\"id\":\" 1.7.10 \"}"));
+    }
+
+    @Test
     public void ignoresNestedIdWhenTopLevelIdIsMissing() {
         String json = "{\"downloads\":{\"client\":{\"id\":\"1.7.10\"}}}";
         assertEquals("", VersionMetadata.readVersionId(json));
@@ -25,11 +31,15 @@ public class VersionMetadataTest {
         assertFalse(VersionMetadata.targetsMinecraft1710("{\"time\":\"now\"}"));
         assertFalse(VersionMetadata.targetsMinecraft1710("{\"id\":1710}"));
         assertFalse(VersionMetadata.targetsMinecraft1710(null));
+        assertFalse(VersionMetadata.targetsMinecraft1710(""));
+        assertFalse(VersionMetadata.targetsMinecraft1710("   "));
     }
 
     @Test
-    public void rejectsMalformedJson() {
+    public void rejectsMalformedJsonAndNonObjectRoots() {
         assertEquals("", VersionMetadata.readVersionId("{\"id\":"));
+        assertEquals("", VersionMetadata.readVersionId("[{\"id\":\"1.7.10\"}]"));
+        assertEquals("", VersionMetadata.readVersionId("\"1.7.10\""));
         assertFalse(VersionMetadata.targetsMinecraft1710("{\"id\":"));
     }
 }

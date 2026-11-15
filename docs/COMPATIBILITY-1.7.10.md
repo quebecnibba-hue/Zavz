@@ -79,3 +79,10 @@ The upstream FDPClient GitHub release page exposes a downloadable asset named `F
 I also checked the `build.gradle` and `gradle.properties` at the exact `b17` tag, rather than relying only on the current default branch. The tagged build explicitly declares Minecraft `1.8.9-11.15.1.2318-1.8.9`, mappings `stable_22`, and Java source/target `1.8`. Its JAR manifest configuration identifies a Forge core plugin and Mixin configuration. This independently confirms that the published b17 source build is for the 1.8.9 Forge workspace, not a 1.7.10 build.
 
 **Artifact-inspection limit:** GitHub's release metadata provides the asset's size and SHA-256, but the binary itself was not downloaded or unpacked in this review. Therefore the hash is the publisher's GitHub asset digest, not a locally recomputed hash, and no claim is made that the binary's internal manifest was independently inspected. The source tag and release metadata are enough to establish the declared target version; they do not establish 1.7.10 compatibility.
+
+
+## Diagnostic scaffold added to this fork
+
+A separate Java 8 diagnostic project now lives in [compatibility/1.7.10](../compatibility/1.7.10/). It records the Minecraft 1.7.10 target and Forge baseline 10.13.4.1614, performs exact version-string matching, and includes unit tests rejecting 1.8.9 and other non-target values. A dedicated GitHub Actions workflow at [compatibility-1.7.10.yml](../.github/workflows/compatibility-1.7.10.yml) runs these tests with Java 8 and Gradle 8.7 when the scaffold changes.
+
+This CI job validates only the diagnostic scaffold. It does not build or test an FDPClient payload, launch CheatBreaker, or establish compatibility of the existing runtime-loading components. The workflow has been committed but its first hosted run has not yet been observed.

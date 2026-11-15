@@ -1,24 +1,34 @@
 package dev.zavz.compatibility;
 
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
-
 /** Passive parser for the top-level id field in a Minecraft version JSON file. */
 public final class VersionMetadata {
-    private static final Pattern ID_FIELD = Pattern.compile(
-        "\\\"id\\\"\\s*:\\s*\\\"([^\\"]+)\\\""
-    );
+    private static final String ID_KEY = "\"id\"";
 
     private VersionMetadata() {
     }
 
-    /** Extracts the version id from launcher metadata text. */
+    /** Extracts the first id value from launcher metadata text. */
     public static String readVersionId(String json) {
         if (json == null || json.trim().isEmpty()) {
             return "";
         }
-        Matcher matcher = ID_FIELD.matcher(json);
-        return matcher.find() ? matcher.group(1).trim() : "";
+        int keyIndex = json.indexOf(ID_KEY);
+        if (keyIndex < 0) {
+            return "";
+        }
+        int colonIndex = json.indexOf(':', keyIndex + ID_KEY.length());
+        if (colonIndex < 0) {
+            return "";
+        }
+        int openingQuote = json.indexOf('\"', colonIndex + 1);
+        if (openingQuote < 0) {
+            return "";
+        }
+        int closingQuote = json.indexOf('\"', openingQuote + 1);
+        if (closingQuote < 0) {
+            return "";
+        }
+        return json.substring(openingQuote + 1, closingQuote).trim();
     }
 
     /** True only when the metadata declares exactly Minecraft 1.7.10. */

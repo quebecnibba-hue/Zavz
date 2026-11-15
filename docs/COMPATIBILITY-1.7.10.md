@@ -127,3 +127,14 @@ The phrase “no Java or Kotlin source files” above refers specifically to the
 ### Metadata identity limitation (15 November 2026)
 
 The diagnostic parser reads the top-level `id` from a supplied launcher version JSON and compares it literally with `1.7.10`. That field identifies a launcher version/profile entry; custom profiles can use IDs that do not equal the underlying Minecraft version. Therefore the parser's three states describe the supplied metadata string only: `SUPPORTED` is an exact ID match, `UNSUPPORTED` is a different non-empty ID, and `UNKNOWN` is absent or invalid metadata. None of these states independently attests to the Minecraft version of a running process. A reliable runtime claim would require a trusted source of the actual game version (for example, an explicit version argument or validated game metadata tied to the launched instance) and integration tests against that launch path.
+
+### Process-detection audit (15 November 2026)
+
+A further read-only review of `src-tauri/src/injector.rs` confirms that client identification is heuristic rather than version-aware:
+
+- On Windows, the detector first filters JVM process names and then classifies candidates from window-title substrings such as `cheatbreaker`, `minecraft`, `forge`, and `lunar`.
+- Candidate scoring gives an additional preference to titles containing `1.8`, but does not parse or validate a Minecraft version from the process command line or game metadata.
+- The resulting `GameClientInfo` contains only PID, process name, client kind, and window title. The Tauri command forwards those same fields without a Minecraft-version value.
+- The user-facing “not found” errors for CheatBreaker, Badlion, CMCLIENT, Vanilla, and Forge explicitly instruct the user to open a 1.8.9 game.
+
+This means the current detector can recognize a process as “CheatBreaker” based on its title, but it cannot distinguish CheatBreaker 1.7.10 from 1.8.9. The `1.8` scoring hint is not a reliable version check and should not be interpreted as one. No process-detection or runtime-loading behavior was changed during this audit.

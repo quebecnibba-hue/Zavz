@@ -157,3 +157,13 @@ The public FDPClient repository currently exposes the following branches through
 - The connected source search for the exact `1.7.10` string returned no results in the upstream repository.
 
 This cross-check does not cover private branches, deleted refs, unindexed code, or unrelated forks. Within the public branches examined, however, there is no 1.7.10 build configuration to reuse. The port still lacks a verified 1.7.10 Java/Kotlin source tree and an integration test target.
+
+### Hosted CI results confirmed (15 November 2026)
+
+I queried the repository's GitHub Actions run records and job steps after the previous note about missing status data:
+
+- For the latest documentation commit `79f5a818d61dc3f7178762338b868f066d457a42`, the main **Build** workflow completed successfully: [run 43756735897](https://github.com/quebecnibba-hue/Zavz/actions/runs/43756735897). Its Windows job reports success for the FDP Lunar DLL build, frontend build, Rust tests, Tauri application build, and artifact upload.
+- The **Lint** workflow also completed successfully for that same commit: [run 43756735841](https://github.com/quebecnibba-hue/Zavz/actions/runs/43756735841).
+- The separate **Minecraft 1.7.10 compatibility checks** workflow completed successfully on commit `2363c56cc21b1f0f483ba1fd8e1bcab1154841cc`: [run 43755415676](https://github.com/quebecnibba-hue/Zavz/actions/runs/43755415676). Its Java 8 setup, Gradle setup, and `Run compatibility tests` step all report success.
+
+The compatibility workflow did not run for `79f5a81` because that commit changes only this documentation file, outside the workflow's configured path filters. The successful Java test run validates the diagnostic metadata parser and its unit tests at commit `2363c56`; it does not compile FDPClient gameplay code or test Minecraft 1.7.10 in CheatBreaker. Thus CI is now verified for the application build and lint on the latest commit, and for the diagnostic scaffold on its latest relevant tested commit, but the actual game port remains unbuilt and unverified.

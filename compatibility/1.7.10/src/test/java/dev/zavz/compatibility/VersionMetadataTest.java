@@ -6,15 +6,17 @@ import static org.junit.Assert.*;
 public class VersionMetadataTest {
     @Test
     public void readsVersionIdFromLauncherJson() {
-        assertEquals("1.7.10", VersionMetadata.readVersionId(
-            "{\\"id\\": \\"1.7.10\\", \\"time\\": \\"2014-09-02T00:00:00+00:00\\"}"
-        ));
+        String json = "{" + "\"id\"" + ":" + "\"1.7.10\"" + "}";
+        assertEquals("1.7.10", VersionMetadata.readVersionId(json));
+        assertTrue(VersionMetadata.targetsMinecraft1710(json));
     }
 
     @Test
     public void rejectsOtherOrMissingVersionMetadata() {
-        assertFalse(VersionMetadata.targetsMinecraft1710("{\\"id\\": \\"1.8.9\\"}"));
-        assertFalse(VersionMetadata.targetsMinecraft1710("{\\"time\\": \\"now\\"}"));
+        String otherVersion = "{" + "\"id\"" + ":" + "\"1.8.9\"" + "}";
+        String missingVersion = "{" + "\"time\"" + ":" + "\"now\"" + "}";
+        assertFalse(VersionMetadata.targetsMinecraft1710(otherVersion));
+        assertFalse(VersionMetadata.targetsMinecraft1710(missingVersion));
         assertFalse(VersionMetadata.targetsMinecraft1710(null));
     }
 }

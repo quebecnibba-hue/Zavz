@@ -11,8 +11,8 @@ This directory is a standalone Java 8 diagnostic scaffold for the Minecraft 1.7.
 ## What is implemented
 
 - An exact-version predicate that accepts only `1.7.10`.
-- A Gson-backed JSON reader that reads only the top-level string `id` field; nested IDs, malformed JSON, and non-string values are rejected.
-- Unit tests covering accepted, rejected, missing, nested, non-string, malformed, empty, and non-object-root metadata.
+- A Gson-backed JSON reader that reads only the top-level string `id` field; nested IDs, malformed JSON, and non-string values are rejected.\n- A three-state classifier: `SUPPORTED` for 1.7.10, `UNSUPPORTED` for another valid version id, and `UNKNOWN` when metadata is absent or invalid. This avoids treating missing evidence as a confirmed incompatible version.
+- Unit tests covering accepted, rejected, missing, nested, non-string, malformed, empty, and non-object-root metadata, including all three classification states.
 - A standalone Gradle Java build, isolated from the existing Tauri application.
 
 ## What is not implemented

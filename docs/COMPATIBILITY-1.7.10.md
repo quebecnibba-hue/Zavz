@@ -35,3 +35,23 @@ The current JAR checks are structural, not a general Minecraft-version detector:
 - The build workflow compiles the existing Lunar native component and runs the repository's current tests, but does not define a 1.7.10 test matrix.
 
 Consequently, changing the displayed CheatBreaker label or accepting another JAR filename would not be a compatibility port. The missing evidence is the actual 1.7.10 Java payload, its dependency/API target, and a reproducible test installation.
+
+## Java/Kotlin source review (15 November 2026)
+
+The ZAVZ repository itself contains **no Java or Kotlin source files** and does not track its payload JARs. The `.gitignore` explicitly excludes `src/load/fdpclient-inject.jar`, `src/load/fdp-lunar.jar`, and other built JARs. Therefore the exact Java bytecode selected by a ZAVZ user cannot be inspected from this repository checkout.
+
+The ZAVZ documentation points to a sibling FDPClient source checkout. The public source repository identified by FDPClient's own `CLIENT_GITHUB` metadata is [SkidderMC/FDPClient](https://github.com/SkidderMC/FDPClient). I inspected its current public source metadata and build configuration as a reference; this does **not** prove that it is byte-for-byte the same revision as any local JAR used with ZAVZ.
+
+Confirmed findings in that source repository:
+
+- The Gradle Minecraft target is explicitly `1.8.9-11.15.1.2318-1.8.9` (Minecraft 1.8.9 with Forge 11.15.1.2318).
+- The mappings are `stable_22`, which are part of that 1.8.9 Forge workspace.
+- Java source/target compatibility is set to 1.8; the main client is predominantly Kotlin.
+- The project has a substantial Mixin integration layer (about 90+ Mixin-related Java/Kotlin source and resource files in the current tree), touching client, entity, GUI, rendering, item, network, and world classes.
+- The main Forge Mixin configuration is generated from `src/main/resources/fdpclient.forge.mixins.json`; the build also has separate Lunar-specific source sets and artifacts.
+
+### Compatibility conclusion
+
+This is not a simple Java runtime-version change. The client is compiled and mapped against the 1.8.9 Forge/Minecraft API. A 1.7.10 target would require a distinct, version-specific source/build configuration and review of the affected Minecraft/Forge classes, method signatures, fields, mixin targets, and runtime dependencies. The present source metadata provides no evidence of an existing 1.7.10 build.
+
+I have not changed any Java/Kotlin gameplay modules, Mixin hooks, native runtime-loading code, or injection behavior. To verify the exact payload intended for ZAVZ, its actual JAR (or the exact FDPClient commit used to build it) is still required.

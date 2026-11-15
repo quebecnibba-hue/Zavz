@@ -26,12 +26,18 @@ The resulting mod JAR is written to `build/libs/`.
 
 1. Start a local Forge 1.7.10 client/server with this mod installed in the normal `mods` folder.
 2. Check the log for the mod initialization messages.
-3. In a world with commands enabled, run `/zavzcompat`. The command replies with the mod name, version, and target game version.
+3. In a world with commands enabled, run `/zavzcompat` to verify that the mod loaded.
+4. Run `/zavzcompat features` to list the registered passive features.
 
-## Entry points
+## Feature architecture
 
-- `CompatibilityMod.java` contains the `@Mod` entry point and the standard pre-init/init/post-init lifecycle handlers.
-- `CompatibilityCommand.java` provides a harmless server-side command to confirm that Forge loaded the mod.
+- `feature/Feature.java` defines the small metadata interface for a feature.
+- `feature/FeatureRegistry.java` registers features, rejects blank/duplicate IDs, and returns an immutable snapshot.
+- `feature/DiagnosticsFeature.java` is a passive example entry.
+- `CompatibilityMod.java` creates the registry and registers the example during pre-initialization.
+- `CompatibilityCommand.java` exposes the registry through the local Forge server command.
+
+New entries should be registered during pre-initialization. Keep feature implementations limited to functionality appropriate for a normal Forge mod; this foundation intentionally contains no game-process injection, memory manipulation, anti-cheat bypass, or gameplay automation.
 
 ## Scope
 

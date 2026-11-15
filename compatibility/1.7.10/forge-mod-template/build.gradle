@@ -22,6 +22,10 @@ minecraft {
     runDir = "run"
 }
 
+dependencies {
+    testCompile "junit:junit:4.13.2"
+}
+
 processResources {
     inputs.property "version", project.version
     inputs.property "mcversion", "1.7.10"

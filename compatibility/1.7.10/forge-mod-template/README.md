@@ -8,8 +8,9 @@ This is a minimal mod project for a **normal, user-controlled Forge 1.7.10 devel
 - Forge 10.13.4.1614
 - Java 8
 - Legacy ForgeGradle 1.2; its old Gradle and repository requirements may need maintenance.
+- JUnit 4.13.2 for unit tests
 
-## Build
+## Build and test
 
 Use Java 8 and a Gradle version compatible with ForgeGradle 1.2. This legacy plugin is not compatible with modern Gradle releases; if the build fails during plugin configuration, use the Gradle version specified by the matching Forge 1.7.10 MDK rather than upgrading the project to the latest Gradle.
 
@@ -17,10 +18,11 @@ Run:
 
 ```sh
 gradle setupDecompWorkspace
+gradle test
 gradle build
 ```
 
-The resulting mod JAR is written to `build/libs/`.
+The unit tests cover feature registration and validation, default and unknown states, immutable snapshots, and configuration load/save behavior. The resulting mod JAR is written to `build/libs/`.
 
 ## Verify in a local Forge world
 

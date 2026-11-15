@@ -8,10 +8,17 @@ param()
 $ErrorActionPreference = 'Stop'
 
 try {
-    $processes = Get-CimInstance -ClassName Win32_Process
+    $processes = @(Get-CimInstance -ClassName Win32_Process)
 } catch {
     Write-Error ("Unable to enumerate process metadata: " + $_.Exception.Message)
     exit 2
+}
+
+# Build a local PID lookup so parent process names can be reported without
+# querying command lines or opening process handles.
+$byPid = @{}
+foreach ($item in $processes) {
+    $byPid[[int]$item.ProcessId] = $item
 }
 
 $results = @(
@@ -31,14 +38,28 @@ $results = @(
             continue
         }
 
+        $parentName = ''
+        $parentId = [int]$process.ParentProcessId
+        if ($byPid.ContainsKey($parentId)) {
+            $parentName = [string]$byPid[$parentId].Name
+        }
+
+        $reason = if ($looksLikeCheatBreaker) {
+            'Process name or window title contains CheatBreaker.'
+        } else {
+            'Java process candidate; parent metadata is contextual only.'
+        }
+
         [pscustomobject]@{
             ProcessId       = [int]$process.ProcessId
-            ParentProcessId = [int]$process.ParentProcessId
+            ParentProcessId = $parentId
+            ParentName      = $parentName
             Name            = $name
             WindowTitle     = $title
             ExecutablePath  = [string]$process.ExecutablePath
+            CandidateReason = $reason
             VersionStatus   = 'UNKNOWN'
-            VersionEvidence = 'No runtime version attestation is collected by this read-only inventory.'
+            VersionEvidence = 'Process metadata does not attest the Minecraft runtime version.'
         }
     }
 )

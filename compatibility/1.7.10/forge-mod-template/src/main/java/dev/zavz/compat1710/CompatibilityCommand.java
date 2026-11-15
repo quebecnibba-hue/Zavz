@@ -32,7 +32,9 @@ public final class CompatibilityCommand extends CommandBase {
             ));
             for (Feature feature : CompatibilityMod.getFeatures().getAll()) {
                 sender.addChatMessage(new ChatComponentText(
-                    "- " + feature.getId() + ": " + feature.getDescription()
+                    "- " + feature.getId() + " ["
+                        + (CompatibilityMod.getFeatures().isEnabled(feature.getId()) ? "enabled" : "disabled")
+                        + "]: " + feature.getDescription()
                 ));
             }
         }

@@ -18,6 +18,8 @@ This directory is a standalone Java 8 diagnostic scaffold for the Minecraft 1.7.
 
 ## What is not implemented
 
+The `id` field is a launcher/profile metadata value, not a cryptographic or runtime attestation of the Minecraft version. Custom launcher profiles may use IDs that do not equal the game version, so `UNSUPPORTED` means only “the supplied metadata ID is not exactly 1.7.10”; it does not prove that the running game is incompatible. Likewise, `SUPPORTED` means only that the supplied metadata ID matches the target string; it does not verify the running process or its actual game classes.
+
 This is **not** an FDPClient port, a CheatBreaker integration, or a game-process loader. It contains no injection, memory manipulation, anti-cheat bypass, or gameplay automation. The existing 1.8.9 client code cannot be declared compatible merely by changing a version string.
 
 ## Run the checks

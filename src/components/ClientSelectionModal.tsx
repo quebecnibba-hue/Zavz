@@ -44,7 +44,7 @@ const clients: Array<{
     id: 'cheatbreaker',
     name: 'CheatBreaker',
     logo: '/img/icon/social/cheatbreaker.webp',
-    statusText: 'Active CheatBreaker 1.8.9 game process.',
+    statusText: 'Detects the CheatBreaker process; the Minecraft version is not verified.',
   },
   {
     id: 'vanilla',

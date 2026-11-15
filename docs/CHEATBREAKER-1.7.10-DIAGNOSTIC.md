@@ -28,7 +28,7 @@ Run from PowerShell on Windows:
 powershell -NoProfile -File .\\tools\\diagnostics\\Get-CheatBreakerProcessInfo.ps1
 ```
 
-The script lists Java processes and processes whose name or window title clearly contains CheatBreaker. It reports PID, parent PID and parent process name, executable name, window title, executable path when Windows makes that metadata available, and why the process was included. Parent metadata is contextual only; it does not prove client identity. It deliberately does not print the full command line because launch arguments can contain session tokens or other secrets. Every result is classified `UNKNOWN`: process metadata is not proof of the Minecraft version running inside the client. Access-denied or exited processes may have incomplete metadata. The script uses CIM/process metadata only and does not open process memory or load code into another process.
+The script lists Java processes and processes whose name or window title clearly contains CheatBreaker. It reports PID, parent PID and parent process name, up to five ancestor process names, executable name, window title, executable path when Windows makes that metadata available, and why the process was included. Parent/ancestor metadata is contextual only; it does not prove client identity. It deliberately does not print the full command line because launch arguments can contain session tokens or other secrets. Every result is classified `UNKNOWN`: process metadata is not proof of the Minecraft version running inside the client. Access-denied or exited processes may have incomplete metadata. The script uses CIM/process metadata only and does not open process memory or load code into another process.
 
 ## Supported route
 

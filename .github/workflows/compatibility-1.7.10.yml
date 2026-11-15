@@ -2,14 +2,16 @@ name: Minecraft 1.7.10 compatibility checks
 
 on:
   push:
-    branches: [main, develop]
+    branches: [main, develop, cheatbreaker-1.7.10]
     paths:
       - "compatibility/1.7.10/**"
+      - "tools/diagnostics/**"
       - ".github/workflows/compatibility-1.7.10.yml"
   pull_request:
     branches: [main, develop]
     paths:
       - "compatibility/1.7.10/**"
+      - "tools/diagnostics/**"
       - ".github/workflows/compatibility-1.7.10.yml"
   workflow_dispatch:
 
@@ -34,3 +36,26 @@ jobs:
       - name: Run compatibility tests
         working-directory: compatibility/1.7.10
         run: gradle --no-daemon clean test
+
+  powershell-diagnostic-syntax:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate diagnostic script syntax
+        shell: pwsh
+        run: |
+          $scriptPath = "tools/diagnostics/Get-CheatBreakerProcessInfo.ps1"
+          $tokens = $null
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile(
+            (Resolve-Path $scriptPath),
+            [ref]$tokens,
+            [ref]$errors
+          ) | Out-Null
+          if ($errors.Count -gt 0) {
+            $errors | ForEach-Object { Write-Error $_.Message }
+            exit 1
+          }
+          Write-Host "PowerShell syntax OK: $scriptPath"

@@ -115,3 +115,6 @@ This avoids conflating missing evidence with a confirmed different Minecraft ver
 
 The connected GitHub endpoints currently return no commit statuses and no pull-request workflow runs for the latest commit. This does not prove that a push-triggered workflow has failed; it means its result is not visible through these endpoints. The code has not been executed in a local or hosted Gradle environment in this session, so test success remains unverified.
 Final verification of the three-state change: the test source now contains explicit assertions for SUPPORTED, UNSUPPORTED, and UNKNOWN, and the module README formatting has been checked after correction. The corresponding follow-up commits are b80012f (classification tests) and 7cb641a (README formatting). These are source inspections only; no Gradle execution result is available.
+### Additional metadata edge cases (15 November 2026)
+
+VersionMetadataTest now also asserts that null, boolean, and whitespace-only top-level id values classify as UNKNOWN. These cases are intentionally not treated as either a supported or a known unsupported Minecraft version. The test source was re-fetched from the main branch after commit e59e04b to confirm the assertions are present; execution remains unverified.
